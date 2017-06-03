@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+Created using JS Bin
+http://jsbin.com
+
+Copyright (c) 2017 by GuimDev (http://jsbin.com/magen/5/edit)
+
+Released under the MIT license: http://jsbin.mit-license.org
+-->
+<meta name="robots" content="noindex">
+<html>
+<head>
+<script src="https://code.jquery.com/jquery-2.1.0.min.js"></script>
+  <meta charset="utf-8">
+  <title>JS Bin</title>
+</head>
+<body>
+	<textarea id="code" cols="150" rows="64">
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="https://code.jquery.com/jquery-2.1.0.min.js"></script>
+	<script src="http://guimdev.github.io/javascripts/prettydiff.min.js"></script>
+	<link rel="icon" type="image/png" href="http://i.imgur.com/vPj6rtq.png" />
+	<meta charset="utf-8">
+	<title>LeeKloud - Prettydiff</title>
+</head>
+<body class="white">
+<div id="prettylk"></div>
+<script>
+var args = {
+		source: "IS_SOURCE",
+		diff: "IS_DIFF",
+		lang: "text",
+	};
+$("#prettylk")[0].innerHTML = prettydiff(args);
+
+GuimDev_Joue();
+</script>
+</body>
+</html>
+</textarea>
+<script id="jsbin-javascript">
+var code = $("#code").val(),
+	alphabet = "";
+
+//code = code.split("");
+
+var char = "", result = code;
+
+while (result.length !== 0) {
+	char = result.charAt(0).toLowerCase();
+	alphabet += char;
+	result = result.split(char).join('');
+	result = result.split(char.toUpperCase()).join('');
+}
+
+result = [];
+var alphaC = "";
+//32-126:   V--- 40
+//" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO
+//PQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+//                                        ----^
+
+//"~}|{zyxwvutsrqponmlkjihgfedcba`_^]\\[ZYXWVUTSRQPONMLKJIHGFE
+//DCBA@?>=<;:9876543210/.-,+*)('&%$#\"! "
+
+//for (var i = 126;i >= 32; i--)
+//	alphaC += String.fromCharCode(i);
+
+alphaC += "zyxwvutsrqponmlkjihgfedcba~?>=<:.-,+`;@_^!'][}|{*)(&%# ";
+alphaC += "9876543210ZYXWVUTSRQPONMLKJIHGFEDCBA"; //"\/$
+
+for (var i = 0; i < code.length; i++) {
+	num = alphabet.indexOf(code.charAt(i));
+	if (num == -1) {
+		result.push("$");
+		num = alphabet.indexOf(code.charAt(i).toLowerCase());
+	}
+	result.push(alphaC.charAt(num));
+}
+var codeC = result.join("");
+
+///------------------------------------------------------------------------------------
+
+codeC = codeC;
+
+var a = [2129856, 2195504, 2490380, 2634114, 2634114, 3158401, 3145729, 3178433, 2638914, 2639746, 2504716, 2195504, 2129856];
+for (var i = 0, value = 0; i < a.length; i++)
+	 a[i] = a[i].toString(2).substr(1);
+
+//a = [0];
+
+var height = 2;
+var beforeC = "var code_de_bas";
+var afterC = "\"";
+var column = Math.ceil(((beforeC+codeC+afterC).length+a.join("").replace(/0/g, "").length)/(a.length+height+2));
+var left = Math.floor((column - a[0].length)/2);
+
+result = [];
+for (var i = 0, j = 0, x = -height, after = "", h = beforeC.length; i < codeC.length; i++, j++) {
+	if ((i + h) % column === 0 && i > 0) {
+		result.push("\n");
+		j = 0;
+		x++;
+	}
+	after += codeC.charAt(i);
+	if (a[x] && a[x].charAt(j-left) == "1") {
+		h++;
+		result.push("█");
+	} else {
+		for (var b = 0, t = after.length; b < t; b++, j++) {
+			if ((a[x] && a[x].charAt(j-left) == "1") ||
+						(i + h + t - b) % column === 0) {
+				break;
+			}
+			result.push(after.charAt(0));
+			after = after.substr(1);
+		}
+		j--;
+	}
+}
+codeC = result.join("");
+
+///------------------------------------------------------------------------------------
+
+alphaC = alphaC.substr(0, alphabet.length);
+
+result = [];
+for (var i = 0, maj = false; i < codeC.length; i++) {
+	num = alphaC.indexOf(codeC.charAt(i));
+	char = alphabet.charAt(num);
+
+	char = (maj) ? char.toUpperCase() : char;
+
+	maj = ((num == -1 && codeC.charAt(i) == "$") || (maj && num == -1));
+	if (num !== -1) {
+		result.push(char);
+	}
+}
+result = result.join("");
+
+///------------------------------------------------------------------------------------
+
+beforeC = "var code_de_base = [\"";
+afterC += "\n].join(\"\").decompressIA(alphaC, alphabet);";
+
+var a = "";
+a += "var alphaC   = "+JSON.stringify(alphaC)+";\n";
+a += "var alphabet = "+JSON.stringify(alphabet)+";\n";
+a += beforeC+codeC.replace(/\n/g, "\",\n    \"")+afterC+"\n";
+a += "\n\n"+(result == code)+"\n";
+a += "\n2:\n"+result;
+$("#code").val(a);
+</script>
+</body>
+</html>
