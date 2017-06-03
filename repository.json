@@ -1,0 +1,5 @@
+[{
+	"name": "Workspace",
+	"description": "Permet d'avoir plusieurs fichiers pour une IA, (vous pouvez avoir des fichiers en commun).",
+	"url": "Plugin/Workspace.js"
+}]
