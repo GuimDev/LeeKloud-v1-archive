@@ -1,0 +1,32 @@
+[1.2.2]
+- [03/06/2017] Récupération de Leekloud. (Cependant le changelog est incomplet, entrée disparue entre la 1.1.6i et la 1.2.2).
+- La 1.2.0 : Comprend l'apparition des plugins.
+[1.1.6i]
+- Correction du bug empêchant la validation de .leekloud-update (apparu lors de la version 1.1.6f et 1.1.6h).
+[1.1.6h]
+- Correction du bug provoquant une mise à jour automatique (apparu lors de la version 1.1.6f).
+[1.1.6g]
+- Correction du bug de coloration qui est apparu sur le changelog de la version 1.1.6f.
+[1.1.6f]
+- Les erreurs sont interceptées, ce qui évite la fermeture brutale et rapide de LeeKloud.
+- Les erreurs sont mises dans un fichier "rapport.log".
+- Si l'erreur n'est pas fatale, LeeKloud peut être relancé en répondant "oui" à la question "Voulez-vous relancer LeeKloud ?".
+- L'emplacement du répertoire de LeeKloud est affiché à la suite du message d'accueil.
+- Amélioration de l'afficage du CHANGELOG dans la console (si il est vide et si le CHANGELOG ne comporte pas la version demandée).
+[1.1.6e]
+- Correction d'un problème sous Mac OS.
+- Correction d'un problème d'affichage d'erreur, si elle est dans les quatres dernières lignes.
+[1.1.6d]
+- Modification de l'"User-Agent" dans l'entête HTTP.
+- Correction d'un problème sous Mac OS, qui provoqué l'arrêt brutal de l'application.
+- Amélioration de la description des commandes dans l'aide.
+- Ajout un changelog, qui s'affiche dans la console.
+[1.1.6c]
+- Amélioration de quelques problème de syntaxe.
+[1.1.6b]
+- Ajout de l'heure au message comme ceci : "[13:07:07] - Requête pour XXXXXXX."
+[1.1.6]
+- .sandbox [id] [num] : Lance un combat de test.
+- Modification de CTRL + B (dans ST2), vous pouvez choisir le poireau avant de lancer le test.
+- .challenge [num] [leekid] : Lance un défi.
+- Vérification auto d'une nouvelle version, installation auto d'une nouvelle version avec : .leekloud-update
