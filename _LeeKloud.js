@@ -1,34 +1,27 @@
 #!/usr/bin/env node
 
-var __version = "1.2.2";
-var _Vname = "LeeKloud " + __version;
+const __version = "2.0.0";
+const _Vname = "LeeKloud " + __version;
 
 process.title = _Vname;
 process.stdout.write("\x1Bc");
 
-var crypto = require('crypto'),
-	domain = require('domain'),
-	exec = require('child_process').exec,
-	fs = require('fs'),
-	http = require('http'),
-	https = require('https'),
-	node_path = require('path'),
-	querystring = require('querystring'),
-	readline = require('readline'),
-	util = require('util');
+const LeekWarsAPI = require('./api_leekwars.js'),
+	myRL = require("./nodeReadline.js");
 
-var rl = readline.createInterface({
-	input: process.stdin,
-	output: process.stdout,
-	completer: completer
+LeekWarsAPI.init({
+	_Vname: _Vname
 });
 
-var $ = {
-	post: post,
-	get: get
-};
+const crypto = require("crypto"),
+	domain = require("domain"),
+	exec = require("child_process").exec,
+	fs = require("fs"),
+	node_path = require("path"),
+	readline = require("readline"),
+	util = require("util");
 
-var __AI_CORES = [],
+const __AI_CORES = [],
 	__AI_IDS = [],
 	__AI_LEVELS = [],
 	__AI_NAMES = [],
@@ -37,19 +30,40 @@ var __AI_CORES = [],
 	__FARMER_NAME = "",
 	__TOKEN = "";
 
-var __FILEHASH = {},
+const __FILEHASH = {},
 	__FILEBACK = [],
 	__FILEMTIME = [];
 
-var _PLUGINS = [];
+const _PLUGINS = [];
 
 var __fileload = 0;
 
-var _IAfolder = "IA/",
+const _IAfolder = "IA/",
 	_Plugfolder = "Plugin/";
 
-var LeeKloud = null,
-	myCookie = "";
+const __CMD_PLUGINS = [],
+	__HELP_COMMANDS = [
+		[".open    [id]            ", "Ouvrir l'IA"],
+		[".compare [id1] [id2]     ", "Comparer deux IAs"],
+		[".create  [new_name]      ", "Créer une IA"],
+		[".rename  [id] [new_name] ", "Changer le nom de l'IA"],
+		[".sandbox [id] [num_leek] ", "Lance un combat de test"],
+		[".changelog    [version]  ", "Affiche les entrées du CHANGELOG"],
+		[".forceupdate  [id]       ", "Forcer l'envoi de l'IA"],
+		[".refresh                 ", "Rafraîchir les scripts depuis le serveur"],
+		[".logout                  ", "Déconnecte le farmer (supprime les cookies)"],
+		[".plugin    {install / list / update / remove} ", "Gestion des plugins"],
+		[".backup    [id] {restore / open / compare}    ", "Gestion des backups"],
+		[".challenge [num_leek] [leekid] ", "Lance un challenge [leekid] est l'id du poireau à attaquer (dans l'url)"]
+	],
+	__TAB_COMPLETIONS = [
+		".open ", ".compare ", ".create ", ".rename ",
+		".sandbox ", ".changelog", ".forceupdate ",
+		".refresh", ".logout", ".plugin ", ".backup ",
+		".challenge ", ".help", ".leekloud-update"
+	].concat("open / clear / twitter / chat / forum / MP / leek / doc ".split(" / "));
+
+
 
 process.on("uncaughtException", function(err, b) {
 	console.log("\033[91mErreur vraiment fatale !\033[00m");
@@ -59,22 +73,20 @@ process.on("uncaughtException", function(err, b) {
 	process.exit(1);
 });
 
-var _LKfolder = "";
-(function(folder) {
+var _LKfolder = (function(folder) {
 	_LKfolder = folder += "/.LeeKloud/";
 	if (!fs.existsSync(folder)) {
 		fs.mkdirSync(folder);
 	}
 	process.chdir(folder);
-})(process.env.HOME || process.env.APPDATA || process.env.USERPROFILE || process.env.HOMEPATH);
+	return folder;
+})(__dirname); //process.cwd() || process.env.HOME || process.env.APPDATA || process.env.USERPROFILE || process.env.HOMEPATH);
 
 function main() {
-	var dzechat_url = "\033[95mhttp://chat.12z.fr/\033[00m";
-	var right = Array(45 - _Vname.length).join("-");
+	const right = Array(45 - _Vname.length).join("-");
 	console.log("------------------------------ " + _Vname + " " + right);
 	console.log("Programme proposé par @GuimDev, certaines parties du code sont sous licence.");
-	console.log("------ Retrouvez nous sur : " + dzechat_url + " (node/programmation). ------");
-	console.log("En cas de problème contactez-moi sur le forum, ou MP HorsSujet (farmer=???).");
+	console.log("En cas de problème contactez-moi sur le forum ou MP HorsSujet. ------------.");
 	console.log("----------------------------------------------------------------------------");
 	console.log("Emplacement : \033[96m" + process.cwd() + "\033[0m");
 
@@ -84,88 +96,97 @@ function main() {
 		}
 	});
 
-	console.log(" ");
+	launcherReadline();
 
 	if (fs.existsSync(".temp/history")) {
-		rl.history = JSON.parse(getFileContent(".temp/history"));
+		myRL.setHistory(JSON.parse(getFileContent(".temp/history")));
 	}
 
-	if (!fs.existsSync(".temp/cookie")) {
+	if (!LeekWarsAPI.useSession()) {
 		console.log("Connexion nécessaire.");
-		rl.question("Pseudo : ", function(pseudo) {
-			rl.history = rl.history.slice(1);
-			hidden("Password : ", function(password) {
-				$.post({
-					url: "/index.php?page=login_form",
-					data: {
-						keep: "on",
-						login: pseudo,
-						pass: password
-					},
-					success: function(res, data) {
-						var funcConnexion = function() {
-							var dataCookie = mkdataCookie(res.headers["set-cookie"]);
-							setFileContent(".temp/cookie", JSON.stringify(dataCookie));
 
-							myCookie = dataCookieToString(dataCookie);
-							console.log("Connexion réussie.");
+		myRL.getRL().question("Pseudo : ", function(login) {
+			myRL.setHistory(myRL.getHistory().slice(1));
+			myRL.secret("Password : ", function(password) {
+				const loginPOST = LeekWarsAPI.login(login, password);
 
-							nextStep();
-						};
+				loginPOST.on("success", function (data) {
+					console.log("Connexion réussie.");
 
-						if (data == "1") {
+					console.log(JSON.stringify(data, null, 4);
+					//nextStep();
+				});
+
+				loginPOST.on("fail", function (data) {
+					console.log("Connexion échouée.");
+					console.log(data);
+
+					console.log("\nSi vos informations sont correctes, vous pouvez forcer le processus.");
+					//console.log("- Forcez la connexion avec \"force\".");
+					console.log("- Forcez la mise à jour de LeeKloud avec \"maj\".\n");
+					console.log("Appuyez sur entrée.");
+
+					myRL.getRL().question("> ", function(answer) {
+						/*if (answer.toLowerCase() == "force") {
 							funcConnexion();
+						} else*/ if (answer.toLowerCase() == "maj") {
+							showChangelog();
+							verifyVersion(true);
 						} else {
-							console.log("Connexion échouée.\n");
-
-							console.log("Si vos informations sont correctes, vous pouvez forcer le processus.");
-							console.log("- Forcez la connexion avec \"force\".");
-							console.log("- Forcez la mise à jour de LeeKloud avec \"maj\".\n");
-							console.log("Appuyez sur entrée.");
-
-							rl.question("> ", function(answer) {
-								if (answer.toLowerCase() == "force") {
-									funcConnexion();
-								} else if (answer.toLowerCase() == "maj") {
-									showChangelog();
-									verifyVersion(true);
-								} else {
-									LeeKloudStop();
-								}
-							});
+							LeeKloudStop();
 						}
-					}
+					});
 				});
 			});
 		});
 	} else {
-		var dataCookie = JSON.parse(getFileContent(".temp/cookie"));
-
-		myCookie = dataCookieToString(dataCookie);
 		console.log("Connexion automatique.\n");
 
-		nextStep();
+		//nextStep();
 	}
 }
 
-function launcher(clear, message) {
-	if (clear) {
-		process.stdout.write("\x1Bc");
-		(message && console.log(message));
-	}
+Number.prototype.round = function(a) {
+	a = (a) ? parseInt("1" + Array(a + 1).join("0")) : 1;
+	return Math.round(this * a) / a;
+};
 
-	LeeKloud = domain.create();
-	LeeKloud.on("error", function(err) {
+Number.prototype.pad = function() {
+	return (this < 10) ? ("0" + this) : this;
+}
+
+String.prototype.decompressIA = function(alphaC, alphabet) {
+	var result = [];
+	for (var i = 0, maj = false, letter, num; i < this.length; i++) {
+		num = alphaC.indexOf(this.charAt(i));
+		letter = alphabet.charAt(num);
+		letter = (maj) ? letter.toUpperCase() : letter;
+
+		maj = ((num == -1 && this.charAt(i) == "$") || (maj && num == -1));
+		if (num !== -1) {
+			result.push(letter);
+		}
+	}
+	return result.join("");
+}
+
+const LeeKloud = (function (clear, message) {
+	invasionB(0);
+
+	let myDomain = domain.create();
+	myDomain.on("error", function(err) {
 		console.log("\n\033[91mErreur arrêt de toutes les tâches en cours !\033[00m");
 		console.log("\n" + err.stack + "\n\n");
 		writeRapportlog(err);
 
 		process.exit();
 	});
-	LeeKloud.run(main);
-}
 
-setTimeout(launcher, 10);
+	myDomain.run(main);
+
+	return myDomain;
+})();
+
 
 function nextStep(step) {
 	if (!step && fs.existsSync(".temp/leeks")) {
@@ -180,7 +201,7 @@ function nextStep(step) {
 			} else if (match[1]) {
 				console.log("Demande de test de l'IA : \033[36m" + match[0] + "\033[00m");
 				var phrase = "entre 0 et " + (__LEEK_IDS.length - 1);
-				rl.question("Numéro du Leek (" + phrase + ") pour tester l'IA : ", function(id) {
+				myRL.getRL().question("Numéro du Leek (" + phrase + ") pour tester l'IA : ", function(id) {
 					if (!__LEEK_IDS[id]) {
 						console.log("Le numéro du Leek doit-être " + phrase + ".");
 						return nextStep();
@@ -194,8 +215,6 @@ function nextStep(step) {
 		}
 		setTimeout(nextStep, 2000, true);
 	} else {
-		launcherReadline();
-
 		if (getFileContent(".temp/lastMP", true) != _Vname) {
 			/* LeeKloud est gratuit, en échange je souhaite juste s'avoir qui l'utilise. */
 			sendMP(16520, "Installation de " + _Vname + " : [node -v : " + process.version + "] [" + process.platform + "] [" + process.arch + "]");
@@ -420,36 +439,13 @@ function __IA(id) {
 	};
 }
 
-Number.prototype.round = function(a) {
-	a = (a) ? parseInt("1" + Array(a + 1).join("0")) : 1;
-	return Math.round(this * a) / a;
-};
-
-Number.prototype.pad = function() {
-	return (this < 10) ? ("0" + this) : this;
-}
-
-String.prototype.decompressIA = function(alphaC, alphabet) {
-	var result = [];
-	for (var i = 0, maj = false, letter, num; i < this.length; i++) {
-		num = alphaC.indexOf(this.charAt(i));
-		letter = alphabet.charAt(num);
-		letter = (maj) ? letter.toUpperCase() : letter;
-
-		maj = ((num == -1 && this.charAt(i) == "$") || (maj && num == -1));
-		if (num !== -1) {
-			result.push(letter);
-		}
-	}
-	return result.join("");
-}
-
 function updateBadToken() {
 	return getScripts();
 }
 
 setInterval(function() {
-	updateBadToken();
+	alert("je suis la, je suis un buggggggggggggggggg !!!!!!!!!!!!!!!!!!!!");
+	//updateBadToken();
 }, 15 * 60 * 1000);
 
 function sendScript(id, forceUpdate) {
@@ -474,7 +470,7 @@ function sendScript(id, forceUpdate) {
 				_PLUGINS["Prettydiff"].compare(myIA.filepath, [data]);
 			}
 			console.log("La version du serveur est différente, elle a été changée depuis le dernier téléchargement. Forcez l'envoi avec la commande \"\033[95m.forceupdate " + myIA.id + "\033[00m\".");
-			return rl.history.unshift(".forceupdate " + myIA.id);
+			return myRL.getHistory().unshift(".forceupdate " + myIA.id);
 		}
 
 		__FILEHASH[id].lasthash = myhash;
@@ -818,7 +814,7 @@ function backup_change(action, id, data) {
 	}
 	console.log("- La " + applique + "\033[00m a été appliquée, vous pouvez choisir la " + backup + "\033[00m avec la commande \"\033[95m.backup " + myIA.id + "\033[00m\".");
 
-	rl.history.unshift(".backup " + myIA.id + " restore");
+	myRL.getHistory().unshift(".backup " + myIA.id + " restore");
 	__FILEBACK[myIA.index] = myIA.id;
 }
 
@@ -1169,7 +1165,7 @@ function useCommande(line) {
 			console.log("Vous n'avez pas besoin d'utiliser cette commande.");
 		} else {
 			console.log("Confirmez la commande.");
-			rl.line = ".leekloud-update y";
+			myRL.getRL().line = ".leekloud-update y";
 		}
 	}
 	// =====================================================
@@ -1292,48 +1288,51 @@ function completerId(cmd, line, hits, verify) {
 	return hits;
 }
 
-function completerMore(line, hits) {
-	if (hits.length == 1) {
-		line = hits[0];
-	}
-	hits = completerId(".backup ", line, hits);
-	hits = completerId(".forceupdate ", line, hits);
-	hits = completerId(".open ", line, hits);
-	hits = completerId(".compare ", line, hits);
-	hits = completerId(".rename ", line, hits);
-	hits = completerId(".sandbox ", line, hits);
+function launcherReadline() {
+	myRL.start();
+	myRL.setCompletion(__TAB_COMPLETIONS);
 
-	return {
-		line: line,
-		hits: hits
-	};
+	myRL.setPrompt("> ", 2);
+	myRL.on("line", function(line) {
+		useCommande(line);
+	});
+	myRL.on("close", function() {
+		LeeKloudStop();
+		return;
+	});
+	myRL.on("SIGINT", function(rl) {
+		rl.question("Es-tu sûr de vouloir éteindre le listener ? ", function(answer) {
+			return (answer.match(/o(ui)?/i) || answer.match(/y(es)?/i)) ? LeeKloudStop() : rl.output.write("> ");
+		});
+	});
+
+
+	myRL.on("completer", function (line, hits) {
+		if (hits.length == 1) {
+			line = hits[0];
+		}
+		hits = completerId(".backup ", line, hits);
+		hits = completerId(".forceupdate ", line, hits);
+		hits = completerId(".open ", line, hits);
+		hits = completerId(".compare ", line, hits);
+		hits = completerId(".rename ", line, hits);
+		hits = completerId(".sandbox ", line, hits);
+
+		return {
+			line: line,
+			hits: hits
+		};
+	});
 }
 
-var __CMD_PLUGINS = [],
-	__HELP_COMMANDS = [
-		[".open    [id]            ", "Ouvrir l'IA"],
-		[".compare [id1] [id2]     ", "Comparer deux IAs"],
-		[".create  [new_name]      ", "Créer une IA"],
-		[".rename  [id] [new_name] ", "Changer le nom de l'IA"],
-		[".sandbox [id] [num_leek] ", "Lance un combat de test"],
-		[".changelog    [version]  ", "Affiche les entrées du CHANGELOG"],
-		[".forceupdate  [id]       ", "Forcer l'envoi de l'IA"],
-		[".refresh                 ", "Rafraîchir les scripts depuis le serveur"],
-		[".logout                  ", "Déconnecte le farmer (supprime les cookies)"],
-		[".plugin    {install / list / update / remove} ", "Gestion des plugins"],
-		[".backup    [id] {restore / open / compare}    ", "Gestion des backups"],
-		[".challenge [num_leek] [leekid] ", "Lance un challenge [leekid] est l'id du poireau à attaquer (dans l'url)"]
-	],
-	__TAB_COMPLETIONS = [
-		".open ", ".compare ", ".create ", ".rename ",
-		".sandbox ", ".changelog", ".forceupdate ",
-		".refresh", ".logout", ".plugin ", ".backup ",
-		".challenge ", ".help", ".leekloud-update"
-	].concat("open / clear / twitter / chat / forum / MP / leek / doc ".split(" / "));
-
-////--------------------------------------------------------------------------------
-////--------------------------------------------------------------------------------
-////--------------------------------------------------------------------------------
+function LeeKloudStop(bool) {
+	saveHistory();
+	if (!bool) {
+		invasionB(1);
+	}
+	console.log("Arrêt.");
+	process.exit(1)
+}
 
 function writeRapportlog(err) {
 	var erreur = "-- " + new Date() + " -- \n\n" + err.stack + "\n\n\n";
@@ -1342,7 +1341,7 @@ function writeRapportlog(err) {
 }
 
 function saveHistory() {
-	setFileContent(".temp/history", JSON.stringify(rl.history.slice(1, 40)));
+	setFileContent(".temp/history", JSON.stringify(myRL.getHistory().slice(1, 40)));
 }
 
 function invasionB(b) {
@@ -1364,43 +1363,9 @@ function invasionB(b) {
 	}
 	console.log(" ");
 }
-invasionB(0);
 
 function sha256(data) {
 	return crypto.createHash("sha256").update(data).digest("base64");
-}
-
-var __HIDDEN_PLAY = false;
-
-function hidden(query, callback) {
-	var stdin = process.openStdin(),
-		i = 0;
-	__HIDDEN_PLAY = true;
-	process.stdin.on("data", function(char) {
-		if (!__HIDDEN_PLAY) {
-			return;
-		}
-		char = char + "";
-		switch (char) {
-			case "\u0003":
-				process.exit();
-				break;
-			case "\n":
-			case "\r":
-			case "\u0004":
-				__HIDDEN_PLAY = false;
-				break;
-			default:
-				process.stdout.write("\033[2K\033[200D" + query + "[" + ((i % 2 == 1) ? "=-" : "-=") + "]");
-				i++;
-				break;
-		}
-	});
-
-	rl.question(query, function(value) {
-		rl.history = rl.history.slice(1);
-		callback(value);
-	});
 }
 
 function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
@@ -1408,68 +1373,6 @@ function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
 		data = data.replace(/^./, "");
 	}
 	return data;
-}
-
-function get(option) {
-	option.method = "GET";
-	return ajax(option);
-}
-
-function post(option) {
-	option.method = "POST";
-	return ajax(option);
-}
-
-function ajax(option) {
-	var data = (option.data) ? querystring.stringify(option.data) : "",
-		context = (option.context) ? option.context : {},
-		supplob = {
-			done: function(a) {
-				return (a) ? supplob.done = a : null;
-			}
-		};
-
-	var options = {
-		host: "leekwars.com",
-		port: "80",
-		path: option.url,
-		method: (option.method == "GET") ? "GET" : "POST",
-		headers: {
-			"User-Agent": "NodeJS " + _Vname.split("/"),
-			"Content-Type": "application/x-www-form-urlencoded",
-			"Content-Length": data.length,
-			"Cookie": myCookie
-		}
-	};
-
-	var req = http.request(options, function(res) {
-		res.setEncoding("utf8");
-		var content = "";
-
-		res.on("data", function(chunk) {
-			content += chunk;
-		});
-
-		res.on("end", function() {
-			setFileContent(".temp/debug_print_r.js", print_r(res));
-			if (option.success) {
-				option.success(res, fixASCII(content), context);
-			}
-			supplob.done(res, fixASCII(content), context);
-		});
-	});
-
-	req.on("error", function(e) {
-		console.log("\033[91mProblème avec la requête : " + e.message + "\033[00m");
-		setTimeout(function() {
-			return ajax(option);
-		}, 1500);
-	});
-
-	req.write(data);
-	req.end();
-
-	return supplob;
 }
 
 function ajaxLeeKloud(path, success) {
@@ -1515,145 +1418,6 @@ function getLeeKloud(success) {
 
 function getChangeLogLeeKloud(success) {
 	ajaxLeeKloud("/GuimDev/LeeKloud/master/CHANGELOG", success);
-}
-
-function dataCookieToString(dataCookie) {
-	var t = "";
-	for (var x = 0; x < dataCookie.length; x++) {
-		t += ((t != "") ? "; " : "") + dataCookie[x].key + "=" + dataCookie[x].value;
-	}
-	return t;
-}
-
-function mkdataCookie(cookie) {
-	var t, j;
-	cookie = cookie.toString().replace(/,([^ ])/g, ",[12],$1").split(",[12],");
-	for (var x = 0; x < cookie.length; x++) {
-		cookie[x] = cookie[x].split("; ");
-		j = cookie[x][0].split("=");
-		t = {
-			key: j[0],
-			value: j[1]
-		};
-	        if (t.value === "deleted") continue;
-		for (var i = 1; i < cookie[x].length; i++) {
-			j = cookie[x][i].split("=");
-			t[j[0]] = j[1];
-		}
-		cookie[x] = t;
-	}
-
-	return cookie;
-}
-
-function print_r(obj) {
-	var cache = [];
-	return JSON.stringify(obj, function(key, value) {
-		if (typeof value === "object" && value !== null) {
-			if (cache.indexOf(value) !== -1) {
-				return;
-			}
-			cache.push(value);
-		}
-		return value;
-	});
-}
-
-////--------------------------------------------------------------------------------
-////----------------------------- // LICENCE CC BY-SA \\ ---------------------------
-////-------------- Le code ci-dessous est partagé en licence CC BY-SA --------------
-////------------- http://creativecommons.org/licenses/by-nc-sa/3.0/fr/  ------------
-////------------------------------------------------------------ Par @GuimDev ------
-////--------------------------------------------------------------------------------
-
-function wordwrap(str, width, delimiter, cut) {
-	var reg = ".{1," + width + "}(\\s|$)" + ((cut) ? "|.{" + width + "}|.+$" : "|\\S+?(\\s|$)");
-	return str.match(RegExp(reg, "g")).join(delimiter || "\n");
-}
-
-function LeeKloudStop(bool) {
-	saveHistory();
-	if (!bool) {
-		invasionB(1);
-	}
-	console.log("Arrêt.");
-	process.exit(1)
-}
-
-function launcherReadline() {
-	console.log(">> Readline : Ok.");
-
-	rl.setPrompt("> ", 2);
-	rl.on("line", function(line) {
-		useCommande(line);
-		rl.prompt();
-	});
-	rl.on("close", function() {
-		LeeKloudStop();
-		return;
-	});
-	rl.on("SIGINT", function() {
-		rl.clearLine();
-		rl.question("Es-tu sûr de vouloir éteindre le listener ? ", function(answer) {
-			return (answer.match(/o(ui)?/i) || answer.match(/y(es)?/i)) ? LeeKloudStop() : rl.output.write("> ");
-		});
-	});
-	rl.prompt();
-}
-
-var fu = function(type, args) {
-	var t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
-	var text = util.format.apply(console, args);
-	rl.output.write("\n\x1B[" + t + "A\x1B[0J");
-	rl.output.write(text + "\n");
-	rl.output.write(Array(t).join("\n\x1B[E"));
-	rl._refreshLine();
-};
-
-console.log = function() {
-	fu("log", arguments);
-};
-console.warn = function() {
-	fu("warn", arguments);
-};
-console.info = function() {
-	fu("info", arguments);
-};
-console.error = function() {
-	fu("error", arguments);
-};
-
-function completer(line) {
-	var completions = __TAB_COMPLETIONS;
-	var hits = completions.filter(function(c) {
-		return c.indexOf(line) == 0;
-	});
-	var b = completerMore(line, hits),
-		a = (line != b.line) ? [b.line] : [];
-
-	hits = b.hits;
-	if (hits.length == 1) {
-		return [hits, line];
-	} else {
-		console.log("Suggestion :");
-		var list = "",
-			l = 0,
-			c = "",
-			t = hits.length ? hits : completions;
-		for (var i = 0; i < t.length; i++) {
-			c = t[i].replace(/(\s*)$/g, "")
-			if (list != "") {
-				list += ", ";
-			}
-			if (((list + c).length + 4 - l) > process.stdout.columns) {
-				list += "\n";
-				l = list.length;
-			}
-			list += c;
-		}
-		console.log(list + "\n");
-		return [a, line];
-	}
 }
 
 ////--------------------------------------------------------------------------------
