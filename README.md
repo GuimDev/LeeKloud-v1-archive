@@ -1,9 +1,9 @@
-LeeKloud 1.2.2 
+LeeKloud 2.0.0
 ========
 
-Une API pour synchroniser vos IA qui sont sur votre ordinateur avec le site [leekwars.com](leekwars.com).
+# LeeKloud v2 n'est pas encore fonctionnel.
 
-### ///ATTENTION\\\ Il s'agit d'une ancienne version !
+Une API pour synchroniser vos IA qui sont sur votre ordinateur avec le site [leekwars.com](leekwars.com).
 
 Pour l'utiliser installer [nodejs](http://nodejs.org/).
 
