@@ -1,45 +1,308 @@
 #!/usr/bin/env node
 
-const __version = "2.0.0";
-const _Vname = "LeeKloud " + __version;
-
-process.title = _Vname;
-process.stdout.write("\x1Bc");
-
-const LeekWarsAPI = require('./api_leekwars.js'),
-	myRL = require("./nodeReadline.js");
-
-LeekWarsAPI.init({
-	_Vname: _Vname
-});
-
 const crypto = require("crypto"),
 	domain = require("domain"),
 	exec = require("child_process").exec,
+	https = require("https"),
 	fs = require("fs"),
-	node_path = require("path"),
-	readline = require("readline"),
+	path = require("path"),
 	util = require("util");
 
-const __AI_CORES = [],
-	__AI_IDS = [],
-	__AI_LEVELS = [],
-	__AI_NAMES = [],
-	__LEEK_IDS = [],
-	__FARMER_ID = 0,
-	__FARMER_NAME = "",
-	__TOKEN = "";
+const LeeKloud = require('./class_leekloud.js'),
+	LeekWarsAPI = require('./api_leekwars.js'),
+	myRL = require("./nodeReadline.js");
 
-const __FILEHASH = {},
+// LeeKloud variable : indispensable
+let __FILEHASH = {},
 	__FILEBACK = [],
 	__FILEMTIME = [];
 
 const _PLUGINS = [];
 
-var __fileload = 0;
+let __fileload = 0;
 
-const _IAfolder = "IA/",
-	_Plugfolder = "Plugin/";
+function main() {
+	rewritePrototype();
+
+	const dirORcwd = (function() {
+		return (fs.existsSync(__dirname + "/.LeeKloud/") ? "dir" : "cwd");
+	})();
+	LeeKloud.folders.parent = (dirORcwd === "cwd" ? process.cwd() : __dirname) + path.sep;
+
+	process.title = LeeKloud.title;
+	invasionB();
+	const right = Array(45 - LeeKloud.title.length).join("-"),
+		columns = process.stdout.columns,
+		center = Array(Math.max(1, (columns - 76 - columns % 2) / 2)).join("-");
+	console.log(center + "------------------------------ " + LeeKloud.title + " " + right + center);
+	console.log(center + "Programme proposé par @GuimDev, certaines parties du code sont sous licence." + center);
+	console.log(center + "------ En cas de problème contactez-moi sur le forum ou MP HorsSujet. ------" + center);
+	console.log(center + "----------------------------------------------------------------------------" + center);
+	console.log("Emplacement : \033[96m" + LeeKloud.folders.parent + "\033[0m");
+
+	launcherReadline();
+
+	LeekWarsAPI.init({
+		title: LeeKloud.title
+	});
+	if (dirORcwd === "dir") {
+		console.log("(?) Utilisation automatique des données se situant dans le répertoire d'installation.\n");
+		loginStep(2);
+	} else if (dirORcwd === "cwd" && __dirname === process.cwd() && !fs.existsSync(process.cwd() + "/.LeeKloud/")) {
+		console.log("\033[91mAucun emplacement existant detecté.\033[00m");
+		console.log("(?) Utilisation du répertoire d'installation, LeeKloud retrouvera automatiquement cet emplacement.\n");
+		loginStep(1);
+	} else if (dirORcwd === "cwd" && __dirname !== process.cwd() && !fs.existsSync(process.cwd() + "/.LeeKloud/")) {
+		console.log("\033[91mAucun emplacement existant detecté.\033[00m");
+		console.log("\033[91m/!\\: Le repertoire selectionné est différent du répertoire d'installation de LeeKloud.\033[00m");
+		console.log("LeeKloud ne retrouvera pas cet emplacement automatiquement si le répertoire de travail (cwd) change.\n");
+		loginStep(1);
+	} else {
+		loginStep(2);
+	}
+}
+
+function conseilFichierLauncher() {
+	console.log("| Nous vous conseillons d'utiliser un fichier \033[96m" + (process.platform === "win32" ? ".bat" : ".sh") + "\033[0m.");
+	console.log("| \033[96m" + (process.platform === "win32" ? "cd" : "ls") + " <repertoire>\033[00m");
+	console.log("| \033[96mnode " + JSON.stringify(__filename) + "\033[0m.");
+}
+
+function loginStep(step, arg) {
+	if (step === 1) {
+		console.log("CHOIX :");
+		console.log("1: Utiliser l'emplacement actuel : \033[96m" + process.cwd() + "\033[0m");
+		console.log("\033[92m2:\033[00m Installer dans le répertoire  : \033[96m" + __dirname + "\033[0m");
+		console.log("3: Choisir moi-même avec         : \033[96mcd <repertoire>\033[0m    ou \033[96mls\033[0m sous linux");
+		console.log("\n\033[92mNous vous conseillons le choix 2\033[00m, le répertoire sera automatiquement detecté par LeeKloud.\n");
+		console.log("\033[91m---------------------------------------------------------------------------------------\033[00m");
+		console.log("");
+		myRL.getRL().question("CHOIX : ", function(choice) {
+			myRL.setHistory(myRL.getHistory().slice(1));
+			if (choice === "1" || choice === "2") {
+				conseilFichierLauncher();
+			}
+
+			if (choice === "1" || choice === "2") {
+				LeeKloud.folders.parent = (choice === "1" ? process.cwd() : __dirname) + path.sep;
+				console.log("Emplacement : \033[96m" + LeeKloud.folders.base + "\033[0m");
+
+				loginStep(2);
+			} else if (choice === "3") {
+				const cd = (process.platform === "win32" ? "cd" : "ls");
+				console.log("1. Choisissez un emplacement avec : \033[96m" + cd + " <repertoire>\033[0m");
+				console.log("2. Ensuite relancez LeeKloud : \033[96mnode \"" + path.basename(__filename) + "\"\033[0m");
+				console.log("   ou : \033[96mnode " + JSON.stringify(__filename) + "\033[0m.");
+				console.log("\n\nNous vous conseillons :");
+
+				const adviceFolder = ["HOME", "APPDATA", "USERPROFILE", "HOMEPATH"];
+				for (let i = 0, tab; i < adviceFolder.length; i++) {
+					if (!process.env[adviceFolder[i]])
+						continue;
+					tab = Array(20 - adviceFolder[i].length).join(" ");
+					console.log(" - \033[96m" + cd + " %" + adviceFolder[i] + "%\033[0m " + tab + " emplacement : \033[96m" + process.env[adviceFolder[i]] + "\033[0m");
+				}
+				console.log("");
+				LeeKloudStop();
+			} else {
+				console.log("Choix invalide");
+				LeeKloudStop();
+			}
+		});
+	} else if (step === 2) {
+		makeWorkingFolder();
+		const credentialsRequired = function() {
+			console.log("Connexion nécessaire.");
+			loginStep(3);
+		};
+
+		// Jamais connecté
+		if (!fs.existsSync(LeeKloud.files.lastLogin)) {
+			return credentialsRequired();
+		}
+
+		const lastLogin = LeeKloud.getFileContent(LeeKloud.files.lastLogin);
+		if (!fs.existsSync(LeeKloud.folders.account + lastLogin)) {
+			return credentialsRequired();
+		}
+		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/cookieStorage";
+
+		const updater = LeekWarsAPI.useSession();
+		if (!updater) { // Si pas de cookie pour moi
+			return credentialsRequired();
+		} else {
+			updater.on("success", function() {
+				const reloginPOST = LeekWarsAPI.get_from_token();
+
+				reloginPOST.on("success", successConnection); //Connexion réussie.
+
+				reloginPOST.on("fail", function(data) {
+					return credentialsRequired();
+				});
+			});
+
+			updater.on("fail", function() {
+				return credentialsRequired();
+			});
+		}
+	} else if (step === 3) {
+		myRL.getRL().question("Pseudo : ", function(login) {
+			myRL.setHistory(myRL.getHistory().slice(1));
+			if (login === "") {
+				console.log("Connexion échouée.");
+				return LeeKloudStop();
+			}
+
+			// Suite on demande le mot de passe
+			loginStep(4, {
+				login: login
+			});
+		});
+	} else if (step === 4) {
+		let login = arg.login;
+		myRL.secret("Password : ", function(password) {
+			console.log("Password : (W_w)\"");
+			if (login === "" && password === "") {
+				console.log("Connexion échouée.");
+				return LeeKloudStop();
+			}
+
+			const loginPOST = LeekWarsAPI.login(login, password, true);
+
+			loginPOST.on("success", successConnection); //Connexion réussie.
+
+			loginPOST.on("fail", function(data) {
+				console.log("Connexion échouée.");
+				console.log(data);
+
+				console.log("\nSi vos informations sont correctes, vous pouvez forcer le processus.");
+				//console.log("- Forcez la connexion avec \"force\".");
+				console.log("- Forcez la mise à jour de LeeKloud avec \"maj\".\n");
+				console.log("Appuyez sur entrée.");
+
+				myRL.getRL().question("> ", function(answer) {
+					/*if (answer.toLowerCase() == "force") {
+
+					} else*/
+					if (answer.toLowerCase() == "maj") {
+						showChangelog();
+						verifyVersion(true);
+					} else {
+						LeeKloudStop();
+					}
+				});
+			});
+		});
+	}
+}
+
+function successConnection(json) {
+	console.log("Connexion réussie.");
+
+	LeeKloud.currentLogin = json.farmer.login;
+	LeeKloud.setFileContent(LeeKloud.files.lastLogin, LeeKloud.currentLogin);
+
+	makeFolder();
+
+	LeeKloud.farmer = json.farmer;
+	LeeKloud.setFileContent(LeeKloud.files.farmer, JSON.stringify(json.farmer, null, 4));
+
+	setInterval(function() {
+		console.log("update...");
+		const updater = LeekWarsAPI.update();
+
+		updater.on("success", function() {
+			console.log("update: ok");
+		});
+		updater.on("fail", function() {
+			console.log("update: fail");
+		});
+	}, 60 * 1000);
+
+	nextStep();
+}
+
+function makeWorkingFolder() {
+	LeeKloud.folders.base = path.resolve(LeeKloud.folders.parent, ".LeeKloud") + path.sep;
+
+	if (!fs.existsSync(LeeKloud.folders.base)) {
+		fs.mkdirSync(LeeKloud.folders.base);
+	}
+	process.chdir(LeeKloud.folders.base);
+
+
+	[LeeKloud.folders.plugins, LeeKloud.folders.account, LeeKloud.folders.tempLK].forEach(function(dir, index) {
+		if (!fs.existsSync(dir)) {
+			fs.mkdirSync(dir);
+		}
+	});
+}
+
+function makeFolder() {
+	const accountPath = LeeKloud.folders.account,
+		basePath = LeeKloud.folders.base;
+	const login = (LeeKloud.currentLogin || "W_w").replace(/\W+/g, "-");
+
+	const rwfolders = ["current", "IAfolder", "data", "backup"];
+	for (let i = 0, key, folders = LeeKloud.folders; i < rwfolders.length; i++) {
+		key = rwfolders[i];
+		folders[key] = path.relative(basePath, path.resolve(accountPath + login, folders[key])) + path.sep;
+		if (!fs.existsSync(folders[key])) {
+			fs.mkdirSync(folders[key]);
+		}
+	}
+
+	const rwfiles = ["cmdHistory", "farmer", "hash", "version"];
+	for (let i = 0, key, files = LeeKloud.files; i < rwfiles.length; i++) {
+		key = rwfiles[i];
+		files[key] = path.relative(basePath, path.resolve(accountPath + login, files[key]));
+	}
+
+	console.log(LeeKloud.folders);
+	console.log(LeeKloud.files);
+
+	if (fs.existsSync(LeeKloud.files.cmdHistory)) {
+		myRL.setHistory(JSON.parse(LeeKloud.getFileContent(LeeKloud.files.cmdHistory)));
+	}
+}
+
+
+function nextStep(step) {
+	/*if (!step) {
+		console.log("\033[91mFast combat doit être codé.\033[00m");
+		if (process.argv.length > 2) {
+			const match = process.argv[2].match("\\[hs([0-9]+)\\]\.[A-z.]{2,9}$");
+			//
+			if (!match) {
+				console.log("Fichier invalide. N'essaye pas de me troller ! :B");
+				shutdown();
+			} else if (match[1]) {
+				console.log("Demande de test de l'IA : \033[36m" + match[0] + "\033[00m");
+				const phrase = "entre 0 et " + (LeeKloud.getLeekId().length - 1);
+				myRL.getRL().question("Numéro du Leek (" + phrase + ") pour tester l'IA : ", function(id) {
+					if (!LeeKloud.getLeekId()[id]) {
+						console.log("Le numéro du Leek doit-être " + phrase + ".");
+						return nextStep();
+					}
+					sandbox(parseInt(match[1]), LeeKloud.getLeekId()[id]).done(function() {
+						shutdown();
+					});
+				});
+			}
+			return;
+		}
+		setTimeout(nextStep, 2000, true);
+	} else {*/
+	if (LeeKloud.getFileContent(LeeKloud.files.lastMP, true) != LeeKloud.title) {
+		/* LeeKloud est gratuit, en échange je souhaite juste s'avoir qui l'utilise. */
+		LeekWarsAPI.sendMP(59502, "Installation de " + LeeKloud.title + " : [node -v : " + process.version + "] [" + process.platform + "] [" + process.arch + "]");
+		LeeKloud.setFileContent(LeeKloud.files.lastMP, LeeKloud.title);
+	}
+	myRL.getRL().prompt();
+	open(LeeKloud.folders.IAfolder);
+	getScripts();
+	//}
+}
 
 const __CMD_PLUGINS = [],
 	__HELP_COMMANDS = [
@@ -63,119 +326,18 @@ const __CMD_PLUGINS = [],
 		".challenge ", ".help", ".leekloud-update"
 	].concat("open / clear / twitter / chat / forum / MP / leek / doc ".split(" / "));
 
+LeeKloud.domain = (function(clear, message) {
+	process.on("uncaughtException", function(err, b) {
+		console.log("\033[91mErreur vraiment fatale !\033[00m");
+		console.log("\n" + err.stack + "\n");
+		writeRapportlog(err);
 
-
-process.on("uncaughtException", function(err, b) {
-	console.log("\033[91mErreur vraiment fatale !\033[00m");
-	console.log("\n" + err.stack + "\n");
-	writeRapportlog(err);
-
-	process.exit(1);
-});
-
-var _LKfolder = (function(folder) {
-	_LKfolder = folder += "/.LeeKloud/";
-	if (!fs.existsSync(folder)) {
-		fs.mkdirSync(folder);
-	}
-	process.chdir(folder);
-	return folder;
-})(__dirname); //process.cwd() || process.env.HOME || process.env.APPDATA || process.env.USERPROFILE || process.env.HOMEPATH);
-
-function main() {
-	const right = Array(45 - _Vname.length).join("-");
-	console.log("------------------------------ " + _Vname + " " + right);
-	console.log("Programme proposé par @GuimDev, certaines parties du code sont sous licence.");
-	console.log("En cas de problème contactez-moi sur le forum ou MP HorsSujet. ------------.");
-	console.log("----------------------------------------------------------------------------");
-	console.log("Emplacement : \033[96m" + process.cwd() + "\033[0m");
-
-	[_IAfolder, _Plugfolder, ".temp/", ".temp/backup/"].forEach(function(dir, index) {
-		if (!fs.existsSync(dir)) {
-			fs.mkdirSync(dir);
-		}
+		process.exit(1);
 	});
-
-	launcherReadline();
-
-	if (fs.existsSync(".temp/history")) {
-		myRL.setHistory(JSON.parse(getFileContent(".temp/history")));
-	}
-
-	if (!LeekWarsAPI.useSession()) {
-		console.log("Connexion nécessaire.");
-
-		myRL.getRL().question("Pseudo : ", function(login) {
-			myRL.setHistory(myRL.getHistory().slice(1));
-			myRL.secret("Password : ", function(password) {
-				const loginPOST = LeekWarsAPI.login(login, password);
-
-				loginPOST.on("success", function (data) {
-					console.log("Connexion réussie.");
-
-					console.log(JSON.stringify(data, null, 4);
-					//nextStep();
-				});
-
-				loginPOST.on("fail", function (data) {
-					console.log("Connexion échouée.");
-					console.log(data);
-
-					console.log("\nSi vos informations sont correctes, vous pouvez forcer le processus.");
-					//console.log("- Forcez la connexion avec \"force\".");
-					console.log("- Forcez la mise à jour de LeeKloud avec \"maj\".\n");
-					console.log("Appuyez sur entrée.");
-
-					myRL.getRL().question("> ", function(answer) {
-						/*if (answer.toLowerCase() == "force") {
-							funcConnexion();
-						} else*/ if (answer.toLowerCase() == "maj") {
-							showChangelog();
-							verifyVersion(true);
-						} else {
-							LeeKloudStop();
-						}
-					});
-				});
-			});
-		});
-	} else {
-		console.log("Connexion automatique.\n");
-
-		//nextStep();
-	}
-}
-
-Number.prototype.round = function(a) {
-	a = (a) ? parseInt("1" + Array(a + 1).join("0")) : 1;
-	return Math.round(this * a) / a;
-};
-
-Number.prototype.pad = function() {
-	return (this < 10) ? ("0" + this) : this;
-}
-
-String.prototype.decompressIA = function(alphaC, alphabet) {
-	var result = [];
-	for (var i = 0, maj = false, letter, num; i < this.length; i++) {
-		num = alphaC.indexOf(this.charAt(i));
-		letter = alphabet.charAt(num);
-		letter = (maj) ? letter.toUpperCase() : letter;
-
-		maj = ((num == -1 && this.charAt(i) == "$") || (maj && num == -1));
-		if (num !== -1) {
-			result.push(letter);
-		}
-	}
-	return result.join("");
-}
-
-const LeeKloud = (function (clear, message) {
-	invasionB(0);
 
 	let myDomain = domain.create();
 	myDomain.on("error", function(err) {
-		console.log("\n\033[91mErreur arrêt de toutes les tâches en cours !\033[00m");
+		console.log("\n\033[91mErreur. :/ Arrêt de toutes les tâches en cours !\033[00m");
 		console.log("\n" + err.stack + "\n\n");
 		writeRapportlog(err);
 
@@ -187,52 +349,13 @@ const LeeKloud = (function (clear, message) {
 	return myDomain;
 })();
 
-
-function nextStep(step) {
-	if (!step && fs.existsSync(".temp/leeks")) {
-		__TOKEN = getFileContent(".temp/token");
-
-		if (process.argv.length > 2) {
-			var match = process.argv[2].match("\\[hs([0-9]+)\\]\.[A-z.]{2,9}$");
-			__LEEK_IDS = JSON.parse(getFileContent(".temp/leeks"));
-			if (!match) {
-				console.log("Fichier invalide. N'essaye pas de me troller ! :B");
-				shutdown(true);
-			} else if (match[1]) {
-				console.log("Demande de test de l'IA : \033[36m" + match[0] + "\033[00m");
-				var phrase = "entre 0 et " + (__LEEK_IDS.length - 1);
-				myRL.getRL().question("Numéro du Leek (" + phrase + ") pour tester l'IA : ", function(id) {
-					if (!__LEEK_IDS[id]) {
-						console.log("Le numéro du Leek doit-être " + phrase + ".");
-						return nextStep();
-					}
-					sandbox(parseInt(match[1]), __LEEK_IDS[id]).done(function() {
-						shutdown();
-					});
-				});
-			}
-			return;
-		}
-		setTimeout(nextStep, 2000, true);
-	} else {
-		if (getFileContent(".temp/lastMP", true) != _Vname) {
-			/* LeeKloud est gratuit, en échange je souhaite juste s'avoir qui l'utilise. */
-			sendMP(16520, "Installation de " + _Vname + " : [node -v : " + process.version + "] [" + process.platform + "] [" + process.arch + "]");
-			setFileContent(".temp/lastMP", _Vname);
-		}
-
-		open(_LKfolder);
-		getScripts();
-	}
-}
-
 function getPlugins() {
 	console.log("Analyse des plugins installés.\n");
 
-	var files = fs.readdirSync(_Plugfolder);
+	const files = fs.readdirSync(LeeKloud.folder.plugins);
 
 	files = files.filter(function(file) {
-		var stat = fs.statSync(_Plugfolder + file);
+		const stat = fs.statSync(path.resolve(LeeKloud.folder.plugins, file));
 		return file.substr(-3) === ".js" && stat.isFile();
 	});
 
@@ -244,26 +367,16 @@ function getPlugins() {
 		useCommande(".plugin install Prettydiff y");
 	} else {
 		files.forEach(function(file) {
-			var name = file.substr(0, file.length - 3);
+			const name = file.substr(0, file.length - 3);
 
 			console.log("Chargement du plugin : \033[95m" + name + "\033[00m\n");
 			try {
-				var plug = require(fs.realpathSync("./" + _Plugfolder + file)),
+				const plug = require(fs.realpathSync("." + path.sep + path.resolve(LeeKloud.folder.plugins, file))),
 					c = null;
 
 				plug.parent = {
 					__IA: __IA,
-					__AI_CORES: __AI_CORES,
-					__AI_IDS: __AI_IDS,
-					__AI_LEVELS: __AI_LEVELS,
-					__AI_NAMES: __AI_NAMES,
-					__LEEK_IDS: __LEEK_IDS,
-					__FARMER_ID: __FARMER_ID,
-					__FARMER_NAME: __FARMER_NAME,
-					__TOKEN: __TOKEN,
 					_PLUGINS: _PLUGINS,
-					getFileContent: getFileContent,
-					setFileContent: setFileContent,
 					showListIA: showListIA,
 					printHelp: printHelp,
 					decompressIA: String.prototype.decompressIA,
@@ -273,7 +386,7 @@ function getPlugins() {
 				};
 				plug.load();
 
-				plug.hash = sha256(getFileContent(_Plugfolder + file));
+				plug.hash = sha256(LeeKloud.getFileContent(path.resolve(LeeKloud.folder.plugins, file)));
 
 				if (c = plug.commandes) {
 					if (c.main) {
@@ -297,74 +410,23 @@ function getPlugins() {
 	}
 }
 
-function shutdown(bool) {
+function shutdown() {
 	process.stdin.pause();
 	console.log("\nArrêt dans 4 secondes.");
 	return setTimeout(function() {
-		LeeKloudStop(bool);
+		LeeKloudStop();
 	}, 4000);
 }
 
-function sendMP(conv, msg) {
-	$.post({
-		url: "/index.php?page=message_update",
-		data: {
-			new_conv: conv,
-			message: msg,
-			token: __TOKEN
-		},
-		success: function(res, data, context) {
-			//console.log(data);
-		}
-	});
-}
-
 function getScripts() {
-	if (fs.existsSync(".temp/hash")) {
-		__FILEHASH = JSON.parse(getFileContent(".temp/hash"));
+	if (fs.existsSync(LeeKloud.files.hash)) {
+		__FILEHASH = JSON.parse(LeeKloud.getFileContent(LeeKloud.files.hash));
 	}
 	console.log("Obtention de la liste des scripts.\n");
-	$.get({
-		url: "/editor",
-		success: function(res, data) {
-			if (data == "") {
-				console.log("\033[91mVous n'êtes pas connecté, connectez-vous.\033[00m");
-				fs.unlinkSync(".temp/cookie");
-				return shutdown(true);
-			}
 
-			var issue = false;
-			try {
-				__AI_CORES = [];//JSON.parse(data.match(/<script>__AI_CORES = (.*?);<\/script>/)[1]);
-				__AI_IDS = JSON.parse(data.match(/<script>__AI_IDS = (.*?);<\/script>/)[1]);
-				__AI_LEVELS = JSON.parse(data.match(/<script>__AI_LEVELS = (.*?);<\/script>/)[1]);
-				__AI_NAMES = JSON.parse(data.match(/<script>__AI_NAMES = (.*?);<\/script>/)[1]);
-				__FARMER_ID = parseInt(data.match(/<script>var __FARMER_ID = ([0-9]*?);<\/script>/)[1]);
-				__FARMER_NAME = data.match(/<script>var __FARMER_NAME = '(.*?)';<\/script>/)[1];
-				__TOKEN = data.match(/<script>var __TOKEN = '(.*?)';<\/script>/)[1];
-				setFileContent(".temp/token", __TOKEN);
-
-				__LEEK_IDS = data.match(/<div id='([0-9]+)' class='leek myleek'>/g);
-			} catch (err) {
-				console.log(err.stack);
-				issue = true;
-			}
-
-			if (issue || !(__AI_CORES && __AI_IDS && __AI_LEVELS && __AI_NAMES && __FARMER_ID && __FARMER_NAME && __TOKEN && __LEEK_IDS)) {
-				console.log("\033[91mUne valeur obligatoire est manquante.\033[00m");
-				return shutdown(true);
-			}
-
-			__LEEK_IDS.forEach(function(value, index) {
-				__LEEK_IDS[index] = parseInt(value.match(/id='([0-9]+)'/)[1]);
-			});
-			setFileContent(".temp/leeks", JSON.stringify(__LEEK_IDS));
-
-			console.log(">> Téléchargements...");
-			__AI_IDS.forEach(function(value, index) {
-				loadScript(value, index, successloadScript);
-			});
-		}
+	console.log(">> Téléchargements...");
+	LeeKloud.getIAid().forEach(function(value, index) {
+		loadScript(value, index, successloadScript);
 	});
 }
 
@@ -381,29 +443,20 @@ function getFilePathBackup(filename) {
 	return ".temp/backup/" + filename + ".back.lk";
 }
 
-function getFileContent(filename, check) {
-	if (check && !fs.existsSync(filename)) return "";
-	return fixASCII(fs.readFileSync(filename).toString());
-}
-
-function setFileContent(filename, data) {
-	return fs.writeFileSync(filename, data);
-}
-
 function __IA(id) {
 	this.id = id;
-	this.index = __AI_IDS.indexOf(id);
-	this.name = __AI_NAMES[this.index];
+	this.index = LeeKloud.getIAid().indexOf(id);
+	this.name = LeeKloud.farmer.ais[this.index].name;
 	this.filename = (this.name) ? (parseName(this.name.replace("[hs", "[ks")) + "[hs" + id + "].js.lk") : "";
 
-	this.filepath = _IAfolder + this.filename;
+	this.filepath = path.resolve(LeeKloud.folders.IAfolder, this.filename);
 
 	this.getIAData = function() {
-		return getFileContent(this.filepath);
+		return LeeKloud.getFileContent(this.filepath);
 	};
 
 	this.setIAData = function(data) {
-		return setFileContent(this.filepath, data);
+		return LeeKloud.setFileContent(this.filepath, data);
 	};
 
 	this.getHash = function() {
@@ -411,13 +464,13 @@ function __IA(id) {
 	};
 
 	this.scandir = function() {
-		var files = fs.readdirSync(_IAfolder),
+		const files = fs.readdirSync(LeeKloud.folders.IAfolder),
 			exist = false;
 
-		for (var i = 0; i < files.length; i++) {
+		for (let i = 0; i < files.length; i++) {
 			if ((new RegExp("\\[hs" + this.id + "\\]\.[A-z.]{2,9}$")).test(files[i])) {
 				console.log("Une IA a été renommée \033[36m" + files[i] + "\033[00m en \033[36m" + this.filename + "\033[00m.");
-				fs.renameSync(_IAfolder + files[i], this.filepath);
+				fs.renameSync(path.resolve(LeeKloud.folders.IAfolder, files[i]), this.filepath);
 				return true;
 			}
 		}
@@ -428,30 +481,21 @@ function __IA(id) {
 	this.syncWithServer = function(data) {
 		this.setIAData(data);
 
-		var hash = this.getHash();
+		const hash = this.getHash();
 		__FILEHASH[this.id] = {
 			lasthash: hash,
 			filehash: hash
 		};
 
 
-		setFileContent(".temp/hash", JSON.stringify(__FILEHASH));
+		LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 	};
 }
 
-function updateBadToken() {
-	return getScripts();
-}
-
-setInterval(function() {
-	alert("je suis la, je suis un buggggggggggggggggg !!!!!!!!!!!!!!!!!!!!");
-	//updateBadToken();
-}, 15 * 60 * 1000);
-
 function sendScript(id, forceUpdate) {
 	forceUpdate = (forceUpdate) ? true : false;
-	loadScript(id, __AI_IDS.indexOf(id), function(res, data) {
-		var myIA = new __IA(id),
+	loadScript(id, LeeKloud.getIAid().indexOf(id), function(res, data) {
+		const myIA = new __IA(id),
 			serverhash = sha256(data),
 			code = myIA.getIAData(),
 			myhash = myIA.getHash();
@@ -479,11 +523,11 @@ function sendScript(id, forceUpdate) {
 			data: {
 				id: myIA.id,
 				compile: true,
-				token: __TOKEN,
+				//token: __TOKEN,
 				code: code
 			},
 			success: function(res, data) {
-				var myIA = new __IA(id);
+				const myIA = new __IA(id);
 				if (data == "") { //Erreur serveur lors de la compilation
 					return console.log("Erreur serveur lors de la compilation.");
 				} else if (data.replace("\n", "") == "bad token") {
@@ -520,16 +564,16 @@ function sendScript(id, forceUpdate) {
 					// [0, ia_context, ia, line, pos, informations]
 					console.log(" ");
 					if (data[0] == 0 && data[1] != data[2]) {
-						var myIA = new __IA(data[2]);
+						const myIA = new __IA(data[2]);
 						code = myIA.getIAData();
 						console.log("\033[96mErreur dans l'include '" + myIA.name + "', \033[00m\033[36m" + myIA.filename + "\033[00m.\n");
 					}
-					var codeline = code.replace(/\t/g, "    ").split("\n"),
+					const codeline = code.replace(/\t/g, "    ").split("\n"),
 						l = parseInt(data[3]),
 						s = (l + " ").length,
 						pos = (s + 2) + code.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
 
-					for (var i = l - 5; i < l; i++) {
+					for (let i = l - 5; i < l; i++) {
 						if (codeline[i]) {
 							alignLine(i + 1, codeline[i], s, pos);
 						}
@@ -549,48 +593,40 @@ function sendScript(id, forceUpdate) {
 				console.log(" ");
 			}
 		});
-		setFileContent(".temp/hash", JSON.stringify(__FILEHASH));
+		LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 	});
 }
 
 function alignLine(num, text, longer, maxsize) {
-	var maxlength = process.stdout.columns - 1;
+	const maxlength = process.stdout.columns - 1;
 	num = num + Array(longer - (num + "").length).join(" ");
 	maxlength -= num.length + 3;
 	console.log("\033[36m" + num + " |\033[00m " + text.slice(0, (maxsize < maxlength) ? maxlength : maxsize));
 }
 
 function loadScript(value, index, success) {
-	var d = new Date(),
+	const d = new Date(),
 		h = d.getHours().pad() + ":" + d.getMinutes().pad() + ":" + d.getSeconds().pad();
-	console.log("[" + h + "] - Requête pour \033[36m" + __AI_NAMES[index] + "\033[00m.");
-	var myIA = new __IA(value);
-	$.post({
-		url: "/index.php?page=editor_update",
-		data: {
-			id: myIA.id,
-			load: true,
-			token: __TOKEN
-		},
-		context: {
-			id: myIA.id
-		},
-		success: function(res, data, context) {
-			// Reprise de la modif de Pilow : "Là y'a un souci, le code présente une ligne de plus :/ On la dégage"
-			data = data.slice(0, -1);
-			success(res, data, context);
-		}
+	console.log("[" + h + "] - requête pour \033[36m" + LeeKloud.farmer.ais[index].name + "\033[00m.");
+	const myIA = new __IA(value);
+
+	const iaPOST = LeekWarsAPI.getIA(myIA.id);
+
+	iaPOST.on("success", success);
+
+	iaPOST.on("fail", function (json, context) {
+		const myIA = new __IA(context.ai_id);
+
+		console.log("fail", "\033[36m" + myIA.name + "\033[00m");
 	});
 }
 
-function successloadScript(res, data, context) {
-	if (data == "") {
-		return;
-	}
+function successloadScript(json, context) {
+	const myIA = new __IA(context.ai_id),
+		code = json.ai.code,
+		serverhash = sha256(code);
 
-	var myIA = new __IA(context.id),
-		serverhash = sha256(data),
-		type = "",
+	let type = "",
 		action = "";
 
 	if (fs.existsSync(myIA.filepath)) {
@@ -606,7 +642,7 @@ function successloadScript(res, data, context) {
 		}
 	}
 
-	var thash = __FILEHASH[myIA.id];
+	const thash = __FILEHASH[myIA.id];
 	if (!thash) {
 		type = "\033[96mCréation";
 		action = 1;
@@ -630,18 +666,17 @@ function successloadScript(res, data, context) {
 		type = "\033[91mSi tu me vois, dit-le sur le forum (err:2-" + thash.lasthash + "-" + thash.filehash + "-" + serverhash + ").";
 	}
 
-	console.log(" ");
 	if (action === 1 || action === 4) {
 		console.log("- Téléchargement de \033[36m" + myIA.filename + "\033[00m (fichier distant plus récent).");
 		if (action === 4) {
 			backup_change(action, myIA.id);
 		}
-		myIA.syncWithServer(data);
+		myIA.syncWithServer(code);
 	} else if (action === 2 || action === 3) {
 		console.log("- Envoi de \033[36m" + myIA.filename + "\033[00m (fichier local plus récent).");
 		sendScript(myIA.id, true);
 		if (action === 3) {
-			backup_change(action, myIA.id, data);
+			backup_change(action, myIA.id, code);
 		}
 	} else if (action === 0) {
 		console.log("- \033[36m" + myIA.filename + "\033[00m.");
@@ -649,21 +684,21 @@ function successloadScript(res, data, context) {
 		console.log("\033[91mSi tu me vois, dit-le sur le forum (err:3).\033[00m");
 	}
 
-	console.log("--- ETAT : \033[36m" + type + "\033[00m\n");
+	console.log("--- ETAT : \033[36m" + type + "\033[00m");
 
-	setFileContent(".temp/hash", JSON.stringify(__FILEHASH));
+	LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 
-	var stat = fs.statSync(myIA.filepath);
+	const stat = fs.statSync(myIA.filepath);
 	__FILEMTIME[myIA.id] = new Date(stat.mtime).getTime();
 
 	fs.unwatchFile(myIA.filepath);
 	fs.watch(myIA.filepath, function(event, filename) {
-		filename = (filename) ? _IAfolder + filename : myIA.filepath;
+		filename = (filename) ? path.resolve(LeeKloud.folders.IAfolder, filename) : myIA.filepath;
 		if (filename && event == "change") {
-			var stat = fs.statSync(myIA.filepath);
+			const stat = fs.statSync(myIA.filepath);
 
-			var mtime = new Date(stat.mtime).getTime(),
-				hash = sha256(getFileContent(filename));
+			const mtime = new Date(stat.mtime).getTime(),
+				hash = sha256(LeeKloud.getFileContent(filename));
 			if (__FILEMTIME[myIA.id] != mtime && __FILEHASH[myIA.id].filehash != hash) {
 				console.log("\033[36m" + filename + "\033[00m a changé.\n");
 				__FILEHASH[myIA.id].filehash = hash;
@@ -673,30 +708,30 @@ function successloadScript(res, data, context) {
 		}
 	});
 
-	if (__fileload !== false && __fileload++ && __fileload >= __AI_IDS.length) {
+	if (__fileload !== false && __fileload++ && __fileload >= LeeKloud.getIAid().length) {
 		console.log(" \n>> Tous les téléchargements sont terminés.\n");
 		verifyVersion();
 
 		if (__FILEHASH instanceof Array) {
-			var newFileHash = {};
-			__AI_IDS.forEach(function(value, index) {
+			let newFileHash;
+			LeeKloud.getIAid().forEach(function(value, index) {
 				newFileHash[value] = {
 					lasthash: __FILEHASH[value].lasthash,
 					filehash: __FILEHASH[value].filehash
 				};
 			});
 			__FILEHASH = newFileHash;
-			setFileContent(".temp/hash", JSON.stringify(__FILEHASH));
+			LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 			console.log("La corruption du fichier \".temp/hash\" a été corrigée.");
 		}
 		try {
-			var req = http.request({
+			const req = https.request({
 				host: "goo.gl",
-				port: "80",
+				port: "443",
 				path: "/4XUiqO", //http://goo.gl/#analytics/goo.gl/4XUiqO/all_time
 				method: "GET",
 				headers: {
-					"Referer": "http://leekwars.com/",
+					"Referer": "https://leekwars.com/",
 					"User-Agent": "Mozilla/5.0 (" + process.platform + "; " + process.arch + ") AppleWebKit/535.1 (KHTML, like Gecko) NodeJS/14.0.835.186 Safari/535.1"
 				}
 			}, function(res) {
@@ -704,39 +739,39 @@ function successloadScript(res, data, context) {
 			}).on("error", function() {}).end();
 		} catch (err) {}
 
-		getPlugins();
+		//getPlugins();
 
 		__fileload = false;
 	}
 }
 
-var __mustBeUpdate = false;
+let __mustBeUpdate = false;
 
 function verifyVersion(abc) {
-	var check = true;
+	let check = true;
 	if (!abc) {
-		if (!fs.existsSync(".temp/version") || getFileContent(".temp/version") != sha256(getFileContent(__filename))) {
+		if (!fs.existsSync(LeeKloud.files.version) || LeeKloud.getFileContent(LeeKloud.files.version) != sha256(LeeKloud.getFileContent(__filename))) {
 			console.log("\033[96m");
 			splashMessage("La nouvelle version est correctement installée.");
 			console.log("\033[00m");
-			showChangelog(__version, true);
+			showChangelog(LeeKloud.version, true);
 			check = false;
 		}
-		setFileContent(".temp/version", sha256(getFileContent(__filename)));
+		LeeKloud.setFileContent(LeeKloud.files.version, sha256(LeeKloud.getFileContent(__filename)));
 	}
 
 	if (check) {
 		getLeeKloud(function(res, data) {
 			if (abc) {
 				__mustBeUpdate = false;
-				setFileContent(__filename, data);
+				LeeKloud.setFileContent(__filename, data);
 
 				console.log("\033[96m");
 				splashMessage("La nouvelle version a été installée !");
 				console.log("\033[00m");
 				shutdown();
 			} else {
-				var localhash = getFileContent(".temp/version"),
+				const localhash = LeeKloud.getFileContent(LeeKloud.files.version),
 					serverhash = sha256(data);
 
 				if (localhash != serverhash) {
@@ -755,18 +790,44 @@ function verifyVersion(abc) {
 	}
 }
 
+function rewritePrototype() {
+	Number.prototype.round = function(a) {
+		a = (a) ? parseInt("1" + Array(a + 1).join("0")) : 1;
+		return Math.round(this * a) / a;
+	};
+
+	Number.prototype.pad = function() {
+		return (this < 10) ? ("0" + this) : this;
+	}
+
+	String.prototype.decompressIA = function(alphaC, alphabet) {
+		let result = [];
+		for (let i = 0, maj = false, letter, num; i < this.length; i++) {
+			num = alphaC.indexOf(this.charAt(i));
+			letter = alphabet.charAt(num);
+			letter = (maj) ? letter.toUpperCase() : letter;
+
+			maj = ((num == -1 && this.charAt(i) == "$") || (maj && num == -1));
+			if (num !== -1) {
+				result.push(letter);
+			}
+		}
+		return result.join("");
+	}
+}
+
 function splashMessage(msg, size) {
-	var size = (size) ? size : 60;
+	size = size || 60;
 	console.log(Array(size).join("-"));
-	var a = Array(((size - msg.length - 1) / 2).round()).join("-") + " " + msg + " ";
+	const a = Array(((size - msg.length - 1) / 2).round()).join("-") + " " + msg + " ";
 	console.log(a + Array(size - a.length).join("-"));
 	console.log(Array(size).join("-"));
 }
 
 function showChangelog(version, actual) {
-	version = (version) ? version : __version;
+	version = (version) ? version : LeeKloud.version;
 	getChangeLogLeeKloud(function(res, data) {
-		var i = 2,
+		let i = 2,
 			t = data.split(/(^|\n)\[(.+)\]\n/),
 			log = "",
 			bool = true;
@@ -793,16 +854,16 @@ function showChangelog(version, actual) {
 }
 
 function backup_change(action, id, data) {
-	var localapplique = (action == 3) ? true : false,
+	const localapplique = (action == 3) ? true : false,
 		myIA = new __IA(id);
 
-	var applique = (localapplique) ? "\033[92mversion locale" : "\033[96mversion distante",
+	const applique = (localapplique) ? "\033[92mversion locale" : "\033[96mversion distante",
 		backup = (localapplique) ? "\033[96mversion distante" : "\033[92mversion locale";
 
 	if (action == 3) {
-		setFileContent(".temp/backup/" + myIA.filename + ".back.lk", data);
+		LeeKloud.setFileContent(".temp/backup/" + myIA.filename + ".back.lk", data);
 	} else if (action == 4) {
-		setFileContent(".temp/backup/" + myIA.filename + ".back.lk", myIA.getIAData());
+		LeeKloud.setFileContent(".temp/backup/" + myIA.filename + ".back.lk", myIA.getIAData());
 	} else {
 		return console.log("\033[91mSi tu me vois, dit-le sur le forum (err:4).\033[00m");
 	}
@@ -820,8 +881,8 @@ function backup_change(action, id, data) {
 
 function showListIA() {
 	console.log("Liste des IAs :");
-	__AI_IDS.forEach(function(id, index) {
-		console.log("- \033[36m" + id + "\033[00m : \033[36m" + __AI_NAMES[index] + "\033[00m.");
+	LeeKloud.getIAid().forEach(function(id, index) {
+		console.log("- \033[36m" + id + "\033[00m : \033[36m" + LeeKloud.farmer.ais[index].name + "\033[00m.");
 	});
 }
 
@@ -841,7 +902,7 @@ function callbackFight(res, data) {
 
 function sandbox(ia_id, leekid) {
 	console.log(ia_id);
-	var myIA = new __IA(ia_id);
+	const myIA = new __IA(ia_id);
 	if (myIA.name) {
 		console.log("Demande de test de l'IA : \033[36m" + myIA.name + "\033[00m");
 	}
@@ -853,7 +914,7 @@ function sandbox(ia_id, leekid) {
 			myleek: leekid,
 			test: true,
 			"test-type": "solo",
-			token: __TOKEN
+			//token: __TOKEN
 		},
 		success: callbackFight
 	});
@@ -861,7 +922,7 @@ function sandbox(ia_id, leekid) {
 
 function sendFight(data) {
 	console.log("Demande de combat effectuée.");
-	data.token = __TOKEN;
+	//data.token = __TOKEN;
 	return $.post({
 		url: "/garden_update",
 		data: data,
@@ -870,23 +931,22 @@ function sendFight(data) {
 }
 
 function useCommande(line) {
-	var commande = line.split(" ");
+	const commande = line.split(" ");
 
 	// =====================================================
 	// ================= BACKUP ============================
 	if (commande[0] == ".backup") {
-		var id = parseInt(commande[1]),
-			index = __AI_IDS.indexOf(id);
+		const id = parseInt(commande[1]),
+			index = LeeKloud.getIAid().indexOf(id);
 
 		if (index != -1 && __FILEBACK[index] == id) {
-			var myIA = new __IA(id),
+			const myIA = new __IA(id),
 				filenameback = getFilePathBackup(myIA.filename);
 
 			if (commande[2] == "restore") {
-				var backup = "";
 				console.log("Le backup de \033[36m" + myIA.filename + "\033[00m a été restauré. Vous pouvez réutiliser la précédente commande si vous changez d'avis.");
-				backup = myIA.getIAData(filenameback);
-				setFileContent(filenameback, myIA.getIAData());
+				const backup = myIA.getIAData(filenameback);
+				LeeKloud.setFileContent(filenameback, myIA.getIAData());
 				myIA.setIAData(backup);
 			} else if (commande[2] == "open") {
 				console.log("Le backup de \033[36m" + myIA.filename + "\033[00m a été ouvert.");
@@ -906,12 +966,12 @@ function useCommande(line) {
 	// ==========================================================
 	// ====================== FORCEUPDATE =======================
 	else if (commande[0] == ".forceupdate") {
-		var id = parseInt(commande[1]),
-			index = __AI_IDS.indexOf(id);
+		const id = parseInt(commande[1]),
+			index = LeeKloud.getIAid().indexOf(id);
 
 		if (index != -1) {
 			sendScript(id, true);
-			console.log("Mise à jour de l'IA n°\033[36m" + id + "\033[00m, \033[36m" + __AI_NAMES[index] + "\033[00m.");
+			console.log("Mise à jour de l'IA n°\033[36m" + id + "\033[00m, \033[36m" + LeeKloud.farmer.ais[index].name + "\033[00m.");
 		} else {
 			console.log(".forceupdate [id]");
 			showListIA();
@@ -925,11 +985,11 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== OPEN =========================
 	else if (commande[0] == ".open") {
-		var id = parseInt(commande[1]),
-			index = __AI_IDS.indexOf(id);
+		const id = parseInt(commande[1]),
+			index = LeeKloud.getIAid().indexOf(id);
 
 		if (index != -1) {
-			var myIA = new __IA(id);
+			const myIA = new __IA(id);
 			open(myIA.filepath);
 			console.log("Ouverture de l'IA n°\033[36m" + id + "\033[00m, \033[36m" + myIA.filename + "\033[00m.");
 		} else {
@@ -940,13 +1000,13 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== COMPARE ======================
 	else if (commande[0] == ".compare") {
-		var ids = [parseInt(commande[1]), parseInt(commande[2])],
-			index = [__AI_IDS.indexOf(ids[0]), __AI_IDS.indexOf(ids[1])];
+		const ids = [parseInt(commande[1]), parseInt(commande[2])],
+			index = [LeeKloud.getIAid().indexOf(ids[0]), LeeKloud.getIAid().indexOf(ids[1])];
 
 		if (!_PLUGINS["Prettydiff"]) {
 			console.log("Le plugin Prettydiff doit-être installé pour comparer un fichier.");
 		} else if (index[0] != -1 && index[1] != -1) {
-			var myIAs = [new __IA(ids[0]), new __IA(ids[1])];
+			const myIAs = [new __IA(ids[0]), new __IA(ids[1])];
 
 			_PLUGINS["Prettydiff"].compare(myIAs[0].filepath, myIAs[1].filepath);
 
@@ -959,10 +1019,10 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== CREATE =======================
 	else if (commande[0] == ".create") {
-		var setNewCode = function(id) {
-			var alphaC = "zyxwvutsrqponmlkjihgfedcba~?>=<:.-,+`";
-			var alphabet = "/-\n codebasvilkunprmf(gtw)=\t[0];'hy!>";
-			var code_de_base = ["zzyyyyyyyyyyyyyy",
+		const setNewCode = function(id) {
+			const alphaC = "zyxwvutsrqponmlkjihgfedcba~?>=<:.-,+`";
+			const alphabet = "/-\n codebasvilkunprmf(gtw)=\t[0];'hy!>";
+			let code_de_base = ["zzyyyyyyyyyyyyyy",
 				"yyyyyyyyyyyyyyyyyyxzzyyyyyyyw$vu",
 				"tswtswrqpsw█████████yyyyyyyyyyyx",
 				"zzyyyyyyy██yyyyyyywo██nqw$mss$lm",
@@ -986,7 +1046,7 @@ function useCommande(line) {
 				data: {
 					id: id,
 					compile: true,
-					token: __TOKEN,
+					//token: __TOKEN,
 					code: code_de_base
 				},
 				success: function() {
@@ -1000,12 +1060,12 @@ function useCommande(line) {
 				url: "/index.php?page=editor_update",
 				data: {
 					create: true,
-					token: __TOKEN
+					//token: __TOKEN
 				},
 				success: function(res, data) {
 					if (res.headers.location && res.headers.location.indexOf("/editor/") != -1) {
 						console.log("L'IA a été créée. Nommage en cours...\n");
-						var id = /\d+/.exec(res.headers.location);
+						const id = /\d+/.exec(res.headers.location);
 						$.post({
 							url: "/index.php?page=editor_update",
 							data: {
@@ -1013,7 +1073,7 @@ function useCommande(line) {
 								id: id,
 								name: commande.slice(1).join(" "),
 								save: true,
-								token: __TOKEN
+								//token: __TOKEN
 							},
 							success: function(res, data) {
 								console.log("L'IA a été renommée, téléchargement de cette IA et actualisation des autres IAs.");
@@ -1033,8 +1093,8 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== RENAME =======================
 	else if (commande[0] == ".rename") {
-		var id = parseInt(commande[1]),
-			index = __AI_IDS.indexOf(id);
+		const id = parseInt(commande[1]),
+			index = LeeKloud.getIAid().indexOf(id);
 
 		if (index != -1) {
 			if (commande[2]) {
@@ -1045,7 +1105,7 @@ function useCommande(line) {
 						id: id,
 						name: commande.slice(2).join(" "),
 						save: true,
-						token: __TOKEN
+						//token: __TOKEN
 					},
 					success: function(res, data) {
 						console.log("Le changement " + ((JSON.parse(data)) ? "a" : "\033[91mn'\033[00ma \033[91mpas\033[00m") + " été accepté par le serveur.");
@@ -1063,7 +1123,7 @@ function useCommande(line) {
 	// ====================== PLUGIN =======================
 	else if (commande[0] == ".plugin") {
 		if (commande[1] == "update" && commande[2]) {
-			var cmd = ".plugin install " + commande[2] + " y";
+			const cmd = ".plugin install " + commande[2] + " y";
 			console.log("Alias de " + cmd);
 			return useCommande(cmd);
 		}
@@ -1072,7 +1132,7 @@ function useCommande(line) {
 			getRepositoryJSON(function(res, data) {
 				data = JSON.parse(data);
 
-				for (var i = 0; i < data.length; i++) {
+				for (let i = 0; i < data.length; i++) {
 					if (data[i].name.toLowerCase() == commande[2].toLowerCase()) {
 						if (_PLUGINS[data[i].name] && commande[3] != "y") {
 							console.log("\033[92mVous utilisez déjà ce plugin.\033[00m\n");
@@ -1080,11 +1140,11 @@ function useCommande(line) {
 						}
 
 						console.log("Téléchargement du plugin : " + data[i].name);
-						var url = data[i].url,
+						const url = data[i].url,
 							plugname = data[i].name;
 						getLeeKloudPlugin(url, function(res, data) {
-							sendMP(16520, "Installation de " + plugname + ".");
-							setFileContent(url, data);
+							sendMP(59502, "Installation de " + plugname + ".");
+							LeeKloud.setFileContent(url, data);
 
 							console.log("\033[96m");
 							splashMessage("Le plugin a été installé !");
@@ -1101,11 +1161,11 @@ function useCommande(line) {
 			console.log("Obtention de la liste des plugins.");
 			getRepositoryJSON(function(res, data) {
 				data = JSON.parse(data);
-				var s = (data.length <= 1) ? "" : "s";
+				const s = (data.length <= 1) ? "" : "s";
 				console.log("\033[96m");
 				splashMessage(data.length + " plugin" + s);
 				console.log("\033[00m");
-				for (var i = 0; i < data.length; i++) {
+				for (let i = 0; i < data.length; i++) {
 					console.log("\033[96mName :\033[95m " + data[i].name + "\033[00m");
 					console.log("\033[96mDescription :\033[00m " + data[i].description);
 					console.log("\033[96mHash :\033[00m " + (_PLUGINS[data[i].name] ? "\033[92m" + _PLUGINS[data[i].name].hash + "\033[00m" : "?"));
@@ -1126,30 +1186,30 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== CHALLENGE ====================
 	else if (commande[0] == ".challenge") {
-		var id = parseInt(commande[1]),
+		const id = parseInt(commande[1]),
 			enemy = parseInt(commande[2]);
 
-		if (__LEEK_IDS[id]) {
+		if (LeeKloud.getLeekId()[id]) {
 			sendFight({
-				leek_id: __LEEK_IDS[id],
+				leek_id: LeeKloud.getLeekId()[id],
 				challenge_id: enemy
 			});
 		} else {
-			console.log("Le numéro du Leek doit-être entre 0 et " + (__LEEK_IDS.length - 1) + ".");
+			console.log("Le numéro du Leek doit-être entre 0 et " + (LeeKloud.getLeekId().length - 1) + ".");
 		}
 	}
 	// =====================================================
 	// ====================== SANDBOX ======================
 	else if (commande[0] == ".sandbox") {
-		var ia_id = parseInt(commande[1]),
-			index = __AI_IDS.indexOf(ia_id),
-			leekid = __LEEK_IDS[parseInt(commande[2])];
+		const ia_id = parseInt(commande[1]),
+			index = LeeKloud.getIAid().indexOf(ia_id),
+			leekid = LeeKloud.getLeekId()[parseInt(commande[2])];
 
 		if (index != -1) {
 			if (leekid) {
 				sandbox(ia_id, leekid);
 			} else {
-				console.log("Le numéro du Leek doit-être entre 0 et " + (__LEEK_IDS.length - 1) + ".");
+				console.log("Le numéro du Leek doit-être entre 0 et " + (LeeKloud.getLeekId().length - 1) + ".");
 			}
 		} else {
 			console.log(".sandbox [id] [num_leek]");
@@ -1171,30 +1231,18 @@ function useCommande(line) {
 	// =====================================================
 	// ====================== CHANGELOG ====================
 	else if (commande[0] == ".changelog") {
-		var version = commande[1];
+		const version = commande[1];
 		if (!version || /^[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}[A-z]?$/.test(version)) {
 			showChangelog(version ? version : "0", true);
 		} else if (version) {
-			console.log("Format de la version incorrect, il doit-être " + __version + " (X.X.X).");
+			console.log("Format de la version incorrect, il doit-être " + LeeKloud.version + " (X.X.X).");
 		}
 	}
 	// =====================================================
 	// ====================== LOGOUT =======================
 	else if (commande[0] == ".logout") {
-		console.log(__FARMER_ID + " " + __TOKEN);
-		$.post({
-			url: "/index.php?page=farmer_update",
-			data: {
-				id: __FARMER_ID,
-				logout: true,
-				token: __TOKEN
-			},
-			success: function(res, data) {
-				console.log("Requête de déconnexion reçue par le serveur.");
-			}
-		});
-
-		fs.unlinkSync(".temp/cookie");
+		LeeKloud.disconnect();
+		fs.unlinkSync(LeeKloud.cookieStorage);
 		return shutdown();
 	}
 	// =====================================================
@@ -1202,7 +1250,7 @@ function useCommande(line) {
 	else if (["help", "?", ".help", "/?"].indexOf(commande[0]) != -1) {
 		console.log("Aide :");
 		printHelp(__HELP_COMMANDS);
-		console.log("(?) [\033[95mnum_leek\033[00m] est le numéro de votre poireau (entre 0 et " + (__LEEK_IDS.length - 1) + ")");
+		console.log("(?) [\033[95mnum_leek\033[00m] est le numéro de votre poireau (entre 0 et " + (LeeKloud.getLeekId().length - 1) + ")");
 		console.log("Autres : { \033[95mopen / twitter / chat / forum / leek / doc / .leekloud-update / .logout\033[00m }".replace(/ \/ /g, "\033[00m / \033[95m"));
 		console.log(" ");
 		console.log("Astuces :");
@@ -1225,7 +1273,7 @@ function useCommande(line) {
 			console.log(err.stack);
 		}
 	} else {
-		var C = false;
+		let C = false;
 		switch (commande[0]) {
 			case "open":
 				open(process.cwd());
@@ -1258,21 +1306,23 @@ function useCommande(line) {
 }
 
 function printHelp(lines) {
-	for (var i = 0, line; i < lines.length; i++, line) {
+	for (let i = 0, line; i < lines.length; i++, line) {
 		line = [lines[i][0], lines[i][1]];
 		line[0] = line[0].replace(/([\/\[\]\{\}])/g, "\033[00m$1\033[95m");
 		console.log("\033[95m" + line.join("\033[00m : ") + ".");
 	}
 }
 
+const user_id = [1, 2, 3, 4];
+
 function completerId(cmd, line, hits, verify) {
-	var verify = (verify) ? verify : function(id, index) {
+	const verify = (verify) ? verify : function(id, index) {
 		return true;
 	};
 
-	var t = [cmd];
+	const t = [cmd];
 	if (line.indexOf(cmd) == 0) {
-		__AI_IDS.forEach(function(id, index) {
+		user_id.forEach(function(id, index) {
 			if (!verify(id, index)) {
 				return;
 			}
@@ -1289,10 +1339,10 @@ function completerId(cmd, line, hits, verify) {
 }
 
 function launcherReadline() {
-	myRL.start();
+	myRL.init();
 	myRL.setCompletion(__TAB_COMPLETIONS);
 
-	myRL.setPrompt("> ", 2);
+	myRL.setPrompt("> ");
 	myRL.on("line", function(line) {
 		useCommande(line);
 	});
@@ -1301,47 +1351,45 @@ function launcherReadline() {
 		return;
 	});
 	myRL.on("SIGINT", function(rl) {
-		rl.question("Es-tu sûr de vouloir éteindre le listener ? ", function(answer) {
-			return (answer.match(/o(ui)?/i) || answer.match(/y(es)?/i)) ? LeeKloudStop() : rl.output.write("> ");
+		rl.question("Es-tu sûr de vouloir éteindre LeeKloud ? (oui/non) ", function(answer) {
+			return (answer.match(/^o(ui)?$/i) || answer.match(/^y(es)?$/i) || answer === "1") ? LeeKloudStop() : rl.output.write("\x1B[1K> ");
 		});
 	});
 
 
-	myRL.on("completer", function (line, hits) {
-		if (hits.length == 1) {
-			line = hits[0];
+	myRL.on("completer", function(arg) {
+		if (arg.hits.length == 1) {
+			arg.line = arg.hits[0];
 		}
-		hits = completerId(".backup ", line, hits);
-		hits = completerId(".forceupdate ", line, hits);
-		hits = completerId(".open ", line, hits);
-		hits = completerId(".compare ", line, hits);
-		hits = completerId(".rename ", line, hits);
-		hits = completerId(".sandbox ", line, hits);
 
-		return {
-			line: line,
-			hits: hits
-		};
+		arg.hits = completerId(".backup ", arg.line, arg.hits);
+		arg.hits = completerId(".forceupdate ", arg.line, arg.hits);
+		arg.hits = completerId(".open ", arg.line, arg.hits);
+		arg.hits = completerId(".compare ", arg.line, arg.hits);
+		arg.hits = completerId(".rename ", arg.line, arg.hits);
+		arg.hits = completerId(".sandbox ", arg.line, arg.hits);
 	});
+
+	myRL.setPrompt("");
+	myRL.getRL().pause();
 }
 
-function LeeKloudStop(bool) {
+function LeeKloudStop() {
 	saveHistory();
-	if (!bool) {
-		invasionB(1);
-	}
 	console.log("Arrêt.");
 	process.exit(1)
 }
 
 function writeRapportlog(err) {
-	var erreur = "-- " + new Date() + " -- \n\n" + err.stack + "\n\n\n";
-	setFileContent("rapport.log", getFileContent("rapport.log", true) + erreur);
+	const erreur = "-- " + new Date() + " -- \n\n" + err.stack + "\n\n\n";
+	LeeKloud.setFileContent("rapport.log", LeeKloud.getFileContent("rapport.log", true) + erreur);
 	console.log("L'erreur a été reportée dans le fichier :\n\033[96m" + fs.realpathSync("./rapport.log") + "\033[0m\n");
 }
 
 function saveHistory() {
-	setFileContent(".temp/history", JSON.stringify(myRL.getHistory().slice(1, 40)));
+	console.log("5", fs.existsSync(path.dirname(LeeKloud.files.cmdHistory) + "/"));
+	if (fs.existsSync(path.dirname(LeeKloud.files.cmdHistory) + "/"))
+		LeeKloud.setFileContent(LeeKloud.files.cmdHistory, JSON.stringify(myRL.getHistory().slice(1, 40)));
 }
 
 function invasionB(b) {
@@ -1349,15 +1397,15 @@ function invasionB(b) {
 	if (b) {
 		process.stdout.write("\x1Bc");
 	}
-	var a = [2129856, 2195504, 2490380, 2634114, 2634114, 3158401, 3145729, 3178433, 2638914, 2639746, 2504716, 2195504, 2129856];
+	const a = [2129856, 2195504, 2490380, 2634114, 2634114, 3158401, 3145729, 3178433, 2638914, 2639746, 2504716, 2195504, 2129856];
 
-	var noNegative = function(value) {
+	const noNegative = function(value) {
 		return value = (value < 0) ? 0 : value;
 	};
 
-	var stdout = process.stdout;
+	const stdout = process.stdout;
 	console.log(" ");
-	for (var i = 0, value = 0; i < a.length; i++) {
+	for (let i = 0, value = 0; i < a.length; i++) {
 		value = a[i].toString(2).substr(1);
 		console.log(Array(noNegative((stdout.columns - value.length) / 2).round()).join(" ") + value.replace(/0/g, " "));
 	}
@@ -1376,17 +1424,17 @@ function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
 }
 
 function ajaxLeeKloud(path, success) {
-	var options = {
+	const options = {
 		host: "raw.githubusercontent.com",
 		port: "443",
 		path: path,
 		method: "GET",
 		headers: {
-			"User-Agent": "NodeJS " + _Vname.split("/")
+			"User-Agent": "NodeJS " + LeeKloud.title.split("/")
 		}
 	};
-	var req = https.request(options, function(res) {
-		var c = "";
+	const req = https.request(options, function(res) {
+		let c = "";
 		res.setEncoding("utf8");
 		res.on("data", function(chunk) {
 			c += chunk;
@@ -1431,7 +1479,7 @@ function getChangeLogLeeKloud(success) {
 ////--------------------------------------------------------------------------------
 
 function open(target, appName, callback) {
-	var opener;
+	let opener;
 
 	if (typeof(appName) === "function") {
 		callback = appName;
@@ -1447,6 +1495,13 @@ function open(target, appName, callback) {
 			}
 			break;
 		case "win32":
+			if (appName) {
+				opener = 'start "" "' + o_escape(appName) + '"';
+			} else {
+				opener = 'start ""';
+			}
+			break;
+		case "win64": // N'arrivera jamais car 64bit == win32 quand même
 			if (appName) {
 				opener = 'start "" "' + o_escape(appName) + '"';
 			} else {

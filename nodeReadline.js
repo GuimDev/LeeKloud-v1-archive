@@ -11,7 +11,7 @@ var rl,
 
 module.exports = (function() {
     return {
-        start: start,
+        init: init,
         secret: secret,
         getPrompt: function() {
             return myPrompt;
@@ -47,7 +47,9 @@ module.exports = (function() {
     };
 })();
 
-function start(strPrompt, callback) {
+var __fix_SIGINT_onQuestion = false;
+
+function init(strPrompt) {
     myPrompt = strPrompt || "> ";
 
     rl = readline.createInterface({
@@ -68,7 +70,8 @@ function start(strPrompt, callback) {
         return process.exit(1);
     });
     rl.on("SIGINT", function() {
-        rl.clearLine();
+        __fix_SIGINT_onQuestion = !!rl._questionCallback;
+        rl.line = '';
         if (!myEmitter.emit("SIGINT", rl))
             process.exit(1);
     });
@@ -77,11 +80,12 @@ function start(strPrompt, callback) {
     hiddenOverwrite();
     consoleOverwrite();
 
-    console.log(">> Readline : Ok.");
     rl.input.on("data", function(char) { // fix CTRL+C on question
-        if (char == "\u0003" && rl._questionCallback) {
+        if (char == "\u0003" && __fix_SIGINT_onQuestion) {
             rl._onLine("");
+            rl._refreshLine();
         }
+        __fix_SIGINT_onQuestion = false;
     });
 }
 
@@ -103,8 +107,9 @@ function hiddenOverwrite() {
     rl._refreshLine = (function(refresh) {
         //https://github.com/nodejs/node/blob/v9.5.0/lib/readline.js#L335
         return function _refreshLine() {
+            let abc;
             if (stdoutMuted) {
-                var abc = rl.line;
+                abc = rl.line;
                 rl.line = "";
             }
 
@@ -119,8 +124,8 @@ function hiddenOverwrite() {
     //https://github.com/nodejs/node/blob/v9.5.0/lib/readline.js#L442
     function _insertString(c) {
         if (this.cursor < this.line.length) {
-            var beg = this.line.slice(0, this.cursor);
-            var end = this.line.slice(this.cursor, this.line.length);
+            const beg = this.line.slice(0, this.cursor);
+            const end = this.line.slice(this.cursor, this.line.length);
             this.line = beg + c + end;
             this.cursor += c.length;
             this._refreshLine();
@@ -151,10 +156,10 @@ function hiddenOverwrite() {
 }
 
 function consoleOverwrite() {
-    var myWrite = function(stream, string, errorhandler) {
+    const myWrite = function(stream, string, errorhandler) {
         process.stdout.write(rl.columns);
-        var nbline = Math.ceil((rl.line.length + 3) / rl.columns);
-        var text = "";
+        const nbline = Math.ceil((rl.line.length + 3) / rl.columns);
+        let text = "";
         text += "\n\r\x1B[" + nbline + "A\x1B[0J";
         text += string + "\r";
         text += Array(nbline).join("\r\x1B[1E");
@@ -233,20 +238,22 @@ function consoleOverwrite() {
 }
 
 function completer(line) {
-    var hits = completions.filter(function(c) {
+    let hits = completions.filter(function(c) {
         return c.indexOf(line) == 0;
     });
 
-    var b = myEmitter.emit("completer", hits),
-        a = (line != b.line) ? [b.line] : [];
+    const arg = {
+        line: line,
+        hits: hits
+    };
 
-    console.log("no null", b);
+    myEmitter.emit("completer", arg);
 
-    hits = b.hits;
+    hits = arg.hits;
     if (hits.length == 1) {
         return [hits, line];
     } else {
-        console.log("Suggestion :");
+        console.log("\x1B[96mSuggestion :\x1B[00m");
         var list = "",
             l = 0,
             c = "",
@@ -262,7 +269,7 @@ function completer(line) {
             }
             list += c;
         }
-        console.log(list + "\n");
-        return [hits, line];
+        console.log("\x1B[96m" + list + "\x1B[00m");
+        return [(line != arg.line) ? [arg.line] : [], line];
     }
 }
