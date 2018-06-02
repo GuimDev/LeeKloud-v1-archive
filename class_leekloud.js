@@ -28,22 +28,22 @@ const LeeKloud = module.exports = {
 	files: {
 		lastLogin: ".tempLK/lastLogin".replace(/\//g, path.sep),
 		lastMP: ".tempLK/lastMP".replace(/\//g, path.sep),
+		version: ".tempLK/version".replace(/\//g, path.sep),
 		// ./account/<login>/
 		cmdHistory: ".data/cmdHistory",
 		hash: ".data/hash",
-		farmer: ".data/farmer",
-		version: ".data/version"
+		farmer: ".data/farmer"
 	},
 
 	//SUPPORT LK v1
-	getIAid: function() {
+	getIAids: function() {
 		const arr = [];
 		for (var i = 0; i < LeeKloud.farmer.ais.length; i++) {
 			arr.push(LeeKloud.farmer.ais[i].id);
 		}
 		return arr;
 	},
-	getLeekId: function() {
+	getLeekIds: function() {
 		const arr = [];
 		for (var index in LeeKloud.farmer.leeks) {
 			if (object.hasOwnProperty(index)) {
