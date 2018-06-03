@@ -1458,19 +1458,19 @@ function ajaxLeeKloud(path, success) {
 }
 
 function getLeeKloudPlugin(path, success) {
-	ajaxLeeKloud("/GuimDev/LeeKloud/master/" + path, success);
+	ajaxLeeKloud("/GuimDev/LeeKloud/update-2.0.0/" + path, success);
 }
 
 function getRepositoryJSON(success) {
-	ajaxLeeKloud("/GuimDev/LeeKloud/master/repository.json", success);
+	ajaxLeeKloud("/GuimDev/LeeKloud/update-2.0.0/repository.json", success);
 }
 
 function getLeeKloud(success) {
-	ajaxLeeKloud("/GuimDev/LeeKloud/master/_LeeKloud.js", success);
+	ajaxLeeKloud("/GuimDev/LeeKloud/update-2.0.0/_LeeKloud.js", success);
 }
 
 function getChangeLogLeeKloud(success) {
-	ajaxLeeKloud("/GuimDev/LeeKloud/master/CHANGELOG", success);
+	ajaxLeeKloud("/GuimDev/LeeKloud/update-2.0.0/CHANGELOG", success);
 }
 
 ////--------------------------------------------------------------------------------
