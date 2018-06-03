@@ -556,25 +556,30 @@ function sendScript(id, forceUpdate) {
 			 *
 			 */
 
-			 console.log(json.result);
-			for (let i = 0, data, code, targetIA; i < json.result.length; i++) {
-				targetIA = myIA;
+			for (let i = 0, data, currentCode, currentIA, originIA, abc, logError = {}; i < json.result.length; i++) {
 				data = json.result[i];
-				code = codeLocal;
 
 				if (data[0] == 0) { // Erreur de compilation "classique"
 					// [0, ia_context, ia, line, pos, informations]
-					console.log(" ");
 					if (data[0] == 0 && data[1] != data[2]) {
-						targetIA = new __IA(data[2]);
-						code = targetIA.getIACode();
-						console.log("\033[96mErreur dans l'include '" + targetIA.name + "', \033[00m\033[36m" + targetIA.filename + "\033[00m.\n");
+						originIA = new __IA(data[1]);
+						console.log("L'erreur impact '\033[36m" + originIA.name + "\033[00m' qui inclut '\033[36m" + currentIA.name + "\033[00m', fichier : \033[36m" + originIA.filename + "\033[00m.");
 					}
-					console.log(code);
-					const codeline = code.replace(/\t/g, "    ").split("\n"),
+
+					abc = data.slice(2).join("+");
+					if (!logError[abc]) {
+						logError[abc] = true;
+					} else {
+						continue; // On épargne le message en double/triple/quadruple...
+					}
+
+					console.log(" ");
+					currentIA = new __IA(data[2]);
+					currentCode = currentIA.getIACode();
+					const codeline = currentCode.replace(/\t/g, "    ").split("\n"),
 						l = parseInt(data[3]),
 						s = (l + " ").length,
-						pos = (s + 2) + code.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
+						pos = (s + 2) + currentCode.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
 
 					for (let i = l - 5; i < l; i++) {
 						if (codeline[i]) {
@@ -583,14 +588,15 @@ function sendScript(id, forceUpdate) {
 					}
 					console.log(Array(pos).join(" ") + "\033[91m^\033[00m");
 
-					console.log("(" + data[5] + ") " + LeekWarsAPI.getTranslation()[data[6]] + " (ligne : \033[96m" + data[3] + "\033[00m, caract : \033[96m" + data[4] + "\033[00m).");
+					console.log("(" + data[5] + ") " + LeekWarsAPI.getTranslation()[data[6]] + " (ligne : \033[96m" + data[3] + "\033[00m, caract : \033[96m" + data[4] + "\033[00m).\n");
 				} else if (data[0] == 1) {
 					// [1, ia_context, informations]
 					console.log("Erreur sans plus d'information : " + data[2]);
 				} else if (data[0] == 2) {
-					// [2, ia_context, core, level]
-					//console.log("Niveau : " + data[3] + " Coeur : " + data[2]);
-						console.log("\033[00m\033[36m" + targetIA.filename + "\033[00m valide.\n");
+					// [2, ia_context]//, core, level]
+					currentIA = new __IA(data[1]);
+					abc  = (myIA.id !== currentIA.id) ? " - " : "";
+					console.log(abc + "\033[36m" + currentIA.filename + "\033[00m valide.");
 				} else {
 					console.log("Le serveur retourne un type de valeur inconnue. Une erreur ? (" + JSON.stringify(data) + ").");
 				}
