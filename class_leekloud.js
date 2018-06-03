@@ -70,7 +70,7 @@ const __AI_IDS = undefined,
 
 function getFileContent(filename, check) {
 	if (check && !fs.existsSync(filename)) return "";
-	return fs.readFileSync(filename);
+	return fs.readFileSync(filename).toString();
 }
 
 function setFileContent(filename, data) {

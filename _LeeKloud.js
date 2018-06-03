@@ -293,8 +293,11 @@ function nextStep(step) {
 	} else {*/
 	if (LeeKloud.getFileContent(LeeKloud.files.lastMP, true) != LeeKloud.title) {
 		/* LeeKloud est gratuit, en échange je souhaite juste s'avoir qui l'utilise. */
-		LeekWarsAPI.sendMP(59502, "Installation de " + LeeKloud.title + " : [node -v : " + process.version + "] [" + process.platform + "] [" + process.arch + "]");
-		LeeKloud.setFileContent(LeeKloud.files.lastMP, LeeKloud.title);
+		const sendmpPOST = LeekWarsAPI.sendMP(59502, "Installation de " + LeeKloud.title + " : [node -v : " + process.version + "] [" + process.platform + "] [" + process.arch + "]");
+		
+		sendmpPOST.on("success", function () {
+			LeeKloud.setFileContent(LeeKloud.files.lastMP, LeeKloud.title);
+		});
 	}
 	myRL.setPrompt("> ");
 	myRL.getRL().prompt();
@@ -433,7 +436,7 @@ function getScripts() {
 		index++;
 
 		if (IAids[index])
-			setTimeout(func, 800);
+			setTimeout(func, 100);
 	};
 	func();
 }
@@ -459,16 +462,16 @@ function __IA(id) {
 
 	this.filepath = path.resolve(LeeKloud.folders.IAfolder, this.filename);
 
-	this.getIAData = function() {
+	this.getIACode = function() {
 		return LeeKloud.getFileContent(this.filepath);
 	};
 
-	this.setIAData = function(data) {
+	this.setIACode = function(data) {
 		return LeeKloud.setFileContent(this.filepath, data);
 	};
 
 	this.getHash = function() {
-		return sha256(this.getIAData());
+		return sha256(this.getIACode());
 	};
 
 	this.scandir = function() {
@@ -487,7 +490,7 @@ function __IA(id) {
 	};
 
 	this.syncWithServer = function(data) {
-		this.setIAData(data);
+		this.setIACode(data);
 
 		const hash = this.getHash();
 		__FILEHASH[this.id] = {
@@ -505,7 +508,7 @@ function sendScript(id, forceUpdate) {
 	loadScript(id, LeeKloud.getIAids().indexOf(id), function(json, context) {
 		const myIA = new __IA(context.ai_id),
 			serverhash = sha256(json.ai.code),
-			codeLocal = myIA.getIAData(),
+			codeLocal = myIA.getIACode(),
 			myhash = myIA.getHash();
 
 		__FILEHASH[id].filehash = myhash;
@@ -520,8 +523,6 @@ function sendScript(id, forceUpdate) {
 			return myRL.getHistory().unshift(".forceupdate " + myIA.id);
 		}
 
-		__FILEHASH[id].lasthash = myhash;
-
 		const saveiaPOST = LeekWarsAPI.saveIA(myIA.id, codeLocal);
 
 		saveiaPOST.on("fail", function(json, context) {
@@ -532,6 +533,8 @@ function sendScript(id, forceUpdate) {
 
 		saveiaPOST.on("success", function(json, context) {
 			const myIA = new __IA(context.ai_id);
+
+			__FILEHASH[id].lasthash = myhash;
 
 			LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 			console.log("L'envoi de \033[36m" + myIA.filename + "\033[00m " + ((json.result[0][0] === 2) ? "réussi" : "échoué") + ".");
@@ -554,21 +557,24 @@ function sendScript(id, forceUpdate) {
 			 */
 
 			 console.log(json.result);
-			for (let i = 0, data; i < json.result.length; i++) {
+			for (let i = 0, data, code, targetIA; i < json.result.length; i++) {
+				targetIA = myIA;
 				data = json.result[i];
+				code = codeLocal;
 
 				if (data[0] == 0) { // Erreur de compilation "classique"
 					// [0, ia_context, ia, line, pos, informations]
 					console.log(" ");
 					if (data[0] == 0 && data[1] != data[2]) {
-						const myIA = new __IA(data[2]);
-						codeLocal = myIA.getIAData();
-						console.log("\033[96mErreur dans l'include '" + myIA.name + "', \033[00m\033[36m" + myIA.filename + "\033[00m.\n");
+						targetIA = new __IA(data[2]);
+						code = targetIA.getIACode();
+						console.log("\033[96mErreur dans l'include '" + targetIA.name + "', \033[00m\033[36m" + targetIA.filename + "\033[00m.\n");
 					}
-					const codeline = codeLocal.replace(/\t/g, "    ").split("\n"),
+					console.log(code);
+					const codeline = code.replace(/\t/g, "    ").split("\n"),
 						l = parseInt(data[3]),
 						s = (l + " ").length,
-						pos = (s + 2) + codeLocal.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
+						pos = (s + 2) + code.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
 
 					for (let i = l - 5; i < l; i++) {
 						if (codeline[i]) {
@@ -583,7 +589,8 @@ function sendScript(id, forceUpdate) {
 					console.log("Erreur sans plus d'information : " + data[2]);
 				} else if (data[0] == 2) {
 					// [2, ia_context, core, level]
-					console.log("Niveau : " + data[3] + " Coeur : " + data[2]);
+					//console.log("Niveau : " + data[3] + " Coeur : " + data[2]);
+						console.log("\033[00m\033[36m" + targetIA.filename + "\033[00m valide.\n");
 				} else {
 					console.log("Le serveur retourne un type de valeur inconnue. Une erreur ? (" + JSON.stringify(data) + ").");
 				}
@@ -862,7 +869,7 @@ function backup_change(action, id, data) {
 		LeeKloud.setFileContent(LeeKloud.folders.backup + myIA.filename + ".back.lk", data);
 	} else if (action == 4) {
 		console.log(":(");
-		LeeKloud.setFileContent(LeeKloud.folders.backup + myIA.filename + ".back.lk", myIA.getIAData());
+		LeeKloud.setFileContent(LeeKloud.folders.backup + myIA.filename + ".back.lk", myIA.getIACode());
 	} else {
 		return console.log("\033[91mSi tu me vois, dit-le sur le forum (err:4).\033[00m");
 	}
@@ -944,9 +951,9 @@ function useCommande(line) {
 
 			if (commande[2] == "restore") {
 				console.log("Le backup de \033[36m" + myIA.filename + "\033[00m a été restauré. Vous pouvez réutiliser la précédente commande si vous changez d'avis.");
-				const backup = myIA.getIAData(filenameback);
-				LeeKloud.setFileContent(filenameback, myIA.getIAData());
-				myIA.setIAData(backup);
+				const backup = myIA.getIACode(filenameback);
+				LeeKloud.setFileContent(filenameback, myIA.getIACode());
+				myIA.setIACode(backup);
 			} else if (commande[2] == "open") {
 				console.log("Le backup de \033[36m" + myIA.filename + "\033[00m a été ouvert.");
 				open(filenameback);
@@ -1430,7 +1437,7 @@ function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
 /*
 fs.readdir("./scandir/", (err, files) => {
 	files.forEach(file => {
-		const data = getFileContent("./scandir/" + file);
+		const data = fs.readFileSync("./scandir/" + file); //Buffer!!!
 		console.log(file, sha1("blob " + data.length + "\0" + data), data.length);
 	});
 })
