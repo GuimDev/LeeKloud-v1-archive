@@ -126,7 +126,7 @@ function loginStep(step, arg) {
 		if (!fs.existsSync(LeeKloud.folders.account + lastLogin)) {
 			return credentialsRequired();
 		}
-		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/cookieStorage";
+		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/.data/cookieStorage";
 
 		const updater = LeekWarsAPI.useSession();
 		if (!updater) { // Si pas de cookie pour moi
@@ -201,6 +201,7 @@ function successConnection(json) {
 	console.log("Connexion réussie.");
 
 	LeeKloud.currentLogin = json.farmer.login;
+	LeeKloud.cookieStorage = LeeKloud.folders.account + LeeKloud.currentLogin + "/.data/cookieStorage";
 	LeeKloud.setFileContent(LeeKloud.files.lastLogin, LeeKloud.currentLogin);
 
 	makeFolder();
@@ -258,9 +259,6 @@ function makeFolder() {
 		key = rwfiles[i];
 		files[key] = path.relative(basePath, path.resolve(accountPath + login, files[key]));
 	}
-
-	console.log(LeeKloud.folders);
-	console.log(LeeKloud.files);
 
 	if (fs.existsSync(LeeKloud.files.cmdHistory)) {
 		myRL.setHistory(JSON.parse(LeeKloud.getFileContent(LeeKloud.files.cmdHistory)));
@@ -505,10 +503,10 @@ function __IA(id) {
 
 function sendScript(id, forceUpdate) {
 	forceUpdate = (forceUpdate) ? true : false;
-	loadScript(id, LeeKloud.getIAids().indexOf(id), function (json, context) {
+	loadScript(id, LeeKloud.getIAids().indexOf(id), function(json, context) {
 		const myIA = new __IA(context.ai_id),
-			code = json.ai.code,
-			serverhash = sha256(code),
+			serverhash = sha256(json.ai.code),
+			codeLocal = myIA.getIAData(),
 			myhash = myIA.getHash();
 
 		__FILEHASH[id].filehash = myhash;
@@ -519,67 +517,59 @@ function sendScript(id, forceUpdate) {
 			} else {
 				_PLUGINS["Prettydiff"].compare(myIA.filepath, [data]);
 			}
-			console.log("La version du serveur est différente, elle a été changée depuis le dernier téléchargement. Forcez l'envoi avec la commande \"\033[95m.forceupdate " + myIA.id + "\033[00m\".");
+			console.log("La version du serveur est différente, elle a été changé depuis le dernier téléchargement. Forcez l'envoi avec la commande \"\033[95m.forceupdate " + myIA.id + "\033[00m\".");
 			return myRL.getHistory().unshift(".forceupdate " + myIA.id);
 		}
 
 		__FILEHASH[id].lasthash = myhash;
-		console.log("manquant.");
-		return;
-		$.post({
-			url: "/index.php?page=editor_update",
-			data: {
-				id: myIA.id,
-				compile: true,
-				//token: __TOKEN,
-				code: code
-			},
-			success: function(res, data) {
-				const myIA = new __IA(id);
-				if (data == "") { //Erreur serveur lors de la compilation
-					return console.log("Erreur serveur lors de la compilation.");
-				} else if (data.replace("\n", "") == "bad token") {
-					console.log("Erreur : " + data);
-					return updateBadToken();
-				} else if (data.replace("\n", "") == "Array") {
-					return console.log("\033[92mRetour 'Array'\033[00m, c'est un problème du serveur impossible de savoir si l'IA a été modifiée ou pas.");
-				}
 
-				try {
-					data = JSON.parse(data);
-				} catch (err) {
-					// Bad token surement. :B
-					console.log("Erreur : " + data);
-					console.log(err.stack);
-					return console.log("\033[92mSignale la, sur le forum !\033[00m");
-				}
+		const saveiaPOST = LeekWarsAPI.saveIA(myIA.id, codeLocal);
 
-				/*
-				 * type 0 / 1 / 2 :
-				 * - ia_context : Id de l'ia compilée (ça peut être l'IA dont on a demandé la compilation ou une ia "parente"
-				 *				  incluant l'IA dont on a demandé la compilation)
-				 * - ia : Id de l'IA dans laquelle l'erreur a été détectée
-				 * - line : Line à laquelle l'erreur a été détectée
-				 * - pos : Caractère de la ligne
-				 * - informations : Informations sur l'erreur
-				 * type 2 :
-				 * - level : level de la fonction de plus haut niveau appelée dans l'ia
-				 * - core : nombre de core de la fonction ayant besoin du plus grand nombre de coeur dans l'ia
-				 */
-				data = data[0];
-				console.log("L'envoi de \033[36m" + myIA.filename + "\033[00m " + ((data[0] == 2) ? "réussi" : "échoué") + ".");
+		saveiaPOST.on("fail", function(json, context) {
+			const myIA = new __IA(context.ai_id);
+			console.log("\033[92mProblème du serveur impossible de savoir si l'IA a été modifiée ou pas.");
+			console.log(json);
+		});
+
+		saveiaPOST.on("success", function(json, context) {
+			const myIA = new __IA(context.ai_id);
+
+			LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
+			console.log("L'envoi de \033[36m" + myIA.filename + "\033[00m " + ((json.result[0][0] === 2) ? "réussi" : "échoué") + ".");
+
+			/*
+			 * 0) type 0 / 1 / 2 :
+			 *   1) ia_context : Id de l'ia compilée (ça peut être l'IA dont on a demandé la compilation ou une ia "parente"
+			 *   				 incluant l'IA dont on a demandé la compilation)
+			 *   2) ia : Id de l'IA dans laquelle l'erreur a été détectée
+			 *   3) line : Line à laquelle l'erreur a été détectée
+			 *   4) pos : Caractère de la ligne
+			 *   5) target : Instruction provoquant l'erreur
+			 *   6) erreur_info : Information sur l'erreur
+			 * 0) type 2 :
+			 *   1) level : level de la fonction de plus haut niveau appelée dans l'ia
+			 *   2) core : nombre de core de la fonction ayant besoin du plus grand nombre de coeur dans l'ia
+			 *
+			 * https://github.com/leek-wars/leek-wars-client/blob/master/src/script/editor_class.js#L267
+			 *
+			 */
+
+			 console.log(json.result);
+			for (let i = 0, data; i < json.result.length; i++) {
+				data = json.result[i];
+
 				if (data[0] == 0) { // Erreur de compilation "classique"
 					// [0, ia_context, ia, line, pos, informations]
 					console.log(" ");
 					if (data[0] == 0 && data[1] != data[2]) {
 						const myIA = new __IA(data[2]);
-						code = myIA.getIAData();
+						codeLocal = myIA.getIAData();
 						console.log("\033[96mErreur dans l'include '" + myIA.name + "', \033[00m\033[36m" + myIA.filename + "\033[00m.\n");
 					}
-					const codeline = code.replace(/\t/g, "    ").split("\n"),
+					const codeline = codeLocal.replace(/\t/g, "    ").split("\n"),
 						l = parseInt(data[3]),
 						s = (l + " ").length,
-						pos = (s + 2) + code.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
+						pos = (s + 2) + codeLocal.split("\n")[l - 1].replace(/[^\t]/g, "").length * 3 + parseInt(data[4]);
 
 					for (let i = l - 5; i < l; i++) {
 						if (codeline[i]) {
@@ -588,7 +578,7 @@ function sendScript(id, forceUpdate) {
 					}
 					console.log(Array(pos).join(" ") + "\033[91m^\033[00m");
 
-					console.log("" + data[5] + " (ligne : \033[96m" + data[3] + "\033[00m, caract : \033[96m" + data[4] + "\033[00m).");
+					console.log("(" + data[5] + ") " + LeekWarsAPI.getTranslation()[data[6]] + " (ligne : \033[96m" + data[3] + "\033[00m, caract : \033[96m" + data[4] + "\033[00m).");
 				} else if (data[0] == 1) {
 					// [1, ia_context, informations]
 					console.log("Erreur sans plus d'information : " + data[2]);
@@ -598,15 +588,14 @@ function sendScript(id, forceUpdate) {
 				} else {
 					console.log("Le serveur retourne un type de valeur inconnue. Une erreur ? (" + JSON.stringify(data) + ").");
 				}
-				console.log(" ");
 			}
+			console.log(" ");
 		});
-		LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
 	});
 }
 
 function alignLine(num, text, longer, maxsize) {
-	const maxlength = process.stdout.columns - 1;
+	let maxlength = process.stdout.columns - 1;
 	num = num + Array(longer - (num + "").length).join(" ");
 	maxlength -= num.length + 3;
 	console.log("\033[36m" + num + " |\033[00m " + text.slice(0, (maxsize < maxlength) ? maxlength : maxsize));
@@ -618,11 +607,11 @@ function loadScript(value, index, success) {
 	console.log("\n[" + h + "] - requête pour \033[36m" + LeeKloud.farmer.ais[index].name + "\033[00m.");
 	const myIA = new __IA(value);
 
-	const iaPOST = LeekWarsAPI.getIA(myIA.id);
+	const getiaPOST = LeekWarsAPI.getIA(myIA.id);
 
-	iaPOST.on("success", success);
+	getiaPOST.on("success", success);
 
-	iaPOST.on("fail", function(json, context) {
+	getiaPOST.on("fail", function(json, context) {
 		const myIA = new __IA(context.ai_id);
 
 		console.log("fail", "\033[36m" + myIA.name + "\033[00m");
@@ -631,8 +620,8 @@ function loadScript(value, index, success) {
 
 function successloadScript(json, context) {
 	const myIA = new __IA(context.ai_id),
-		code = json.ai.code,
-		serverhash = sha256(code);
+		codeDistant = json.ai.code,
+		serverhash = sha256(codeDistant);
 
 	let type = "",
 		action = "";
@@ -679,12 +668,12 @@ function successloadScript(json, context) {
 		if (action === 4) {
 			backup_change(action, myIA.id);
 		}
-		myIA.syncWithServer(code);
+		myIA.syncWithServer(codeDistant);
 	} else if (action === 2 || action === 3) {
 		console.log("- Envoi de \033[36m" + myIA.filename + "\033[00m (fichier local plus récent).");
 		sendScript(myIA.id, true);
 		if (action === 3) {
-			backup_change(action, myIA.id, code);
+			backup_change(action, myIA.id, codeDistant);
 		}
 	} else if (action === 0) {
 		console.log("- \033[36m" + myIA.filename + "\033[00m.");
@@ -730,7 +719,7 @@ function successloadScript(json, context) {
 			});
 			__FILEHASH = newFileHash;
 			LeeKloud.setFileContent(LeeKloud.files.hash, JSON.stringify(__FILEHASH));
-			console.log("La corruption du fichier \".temp/hash\" a été corrigée.");
+			console.log("La corruption du fichier \".temp/hash\" a été corrigé.");
 		}
 
 		try {
@@ -1398,7 +1387,6 @@ function writeRapportlog(err) {
 }
 
 function saveHistory() {
-	console.log("5", fs.existsSync(path.dirname(LeeKloud.files.cmdHistory) + "/"));
 	if (fs.existsSync(path.dirname(LeeKloud.files.cmdHistory) + "/"))
 		LeeKloud.setFileContent(LeeKloud.files.cmdHistory, JSON.stringify(myRL.getHistory().slice(1, 40)));
 }

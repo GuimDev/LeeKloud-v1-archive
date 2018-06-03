@@ -1,10 +1,16 @@
+/*
+ * nodeReadline v0.1.1
+ * https://github.com/GuimDev/nodeReadline
+ * Tested on = node v0.9.5
+ */
+
 const readline = require('readline'),
     util = require('util'),
     EventEmitter = require('events');
 
 const myEmitter = new EventEmitter();
 
-var rl,
+let rl,
     stdoutMuted = false,
     myPrompt = "> ",
     completions = [];
@@ -47,7 +53,7 @@ module.exports = (function() {
     };
 })();
 
-var __fix_SIGINT_onQuestion = false;
+let __fix_SIGINT_onQuestion = false;
 
 function init(strPrompt) {
     myPrompt = strPrompt || "> ";
@@ -254,11 +260,11 @@ function completer(line) {
         return [hits, line];
     } else {
         console.log("\x1B[96mSuggestion :\x1B[00m");
-        var list = "",
+        let list = "",
             l = 0,
             c = "",
             t = hits.length ? hits : completions;
-        for (var i = 0; i < t.length; i++) {
+        for (let i = 0; i < t.length; i++) {
             c = t[i].replace(/(\s*)$/g, "")
             if (list != "") {
                 list += ", ";
