@@ -142,7 +142,6 @@ const LeekWarsAPI = (function() {
 					myEmitter.emit("success", json, context);
 				} else {
 					myEmitter.emit("fail", json, context);
-					process.exit();
 				}
 			}
 		});
@@ -168,9 +167,9 @@ const LeekWarsAPI = (function() {
 				let json = raw2json(data);
 
 				if (!json.success || !json.result || json.result.length == 0) {
-					myEmitter.emit("fail", json);
+					myEmitter.emit("fail", jso, context);
 				} else {
-					myEmitter.emit("success", json);
+					myEmitter.emit("success", json, context);
 				}
 			}
 		});
@@ -195,7 +194,6 @@ const LeekWarsAPI = (function() {
 					myEmitter.emit("success", json);
 				} else {
 					myEmitter.emit("fail", json);
-					process.exit();
 				}
 			}
 		});
