@@ -40,8 +40,17 @@ const LeekWarsAPI = (function() {
 		}
 		return false;
 	}
+
 	function useSession() {
 		const myEmitter = new EventEmitter();
+
+		/*// >> Ici et non autre part... ^_^"
+		const lastLogin = LeeKloud.getFileContent(LeeKloud.files.lastLogin);
+		if (!fs.existsSync(LeeKloud.folders.account + lastLogin)) {
+			return credentialsRequired();
+		}
+		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/.data/cookieStorage".replace(/\//g, path.sep);
+		// <<*/
 
 		if (loadCookie()) {
 			const updater = update();
@@ -56,7 +65,7 @@ const LeekWarsAPI = (function() {
 			});
 
 			return myEmitter;
-		} else { 
+		} else {
 			return false; // = Pas de cookie pour toi
 		}
 	}
@@ -66,8 +75,13 @@ const LeekWarsAPI = (function() {
 		let json = raw2json(data);
 
 		if (json.success) {
-			myEmitter.emit("success", json);
-			saveCookie(res); // volontairement rajouté après (car dossier par encore créé avant l'event).
+			/*// >> Avant et non après... ^_^"
+			LeeKloud.cookieStorage = LeeKloud.folders.account + json.farmer.login + "/.data/cookieStorage".replace(/\//g, path.sep);
+			saveCookie(res);
+			// <<*/
+			myEmitter.emit("success", json, function() {
+				saveCookie(res);
+			});
 		} else {
 			myEmitter.emit("fail", json);
 		}
@@ -166,6 +180,7 @@ const LeekWarsAPI = (function() {
 
 	// POST /api/message/create-conversation/ {farmer_id} {message} {token}
 	function sendMP(conv, msg) {
+		const myEmitter = new EventEmitter();
 		$.post({
 			url: "/api/message/create-conversation/",
 			data: {
@@ -174,9 +189,18 @@ const LeekWarsAPI = (function() {
 				token: "$"
 			},
 			success: function(res, data, context) {
-				console.log(data);
+				let json = raw2json(data);
+
+				if (json.success) {
+					myEmitter.emit("success", json);
+				} else {
+					myEmitter.emit("fail", json);
+					process.exit();
+				}
 			}
 		});
+
+		return myEmitter;
 	}
 
 	// POST farmer/update/ {token}
@@ -207,10 +231,6 @@ const LeekWarsAPI = (function() {
 		return translation;
 	}
 
-	function init(opt) {
-		_Vname = opt._Vname || "LeeKloud crash";
-	}
-
 	return {
 		useSession: useSession,
 		get_from_token: get_from_token,
@@ -219,8 +239,7 @@ const LeekWarsAPI = (function() {
 		getIA: getIA,
 		saveIA: saveIA,
 		getTranslation: getTranslation,
-		sendMP: sendMP,
-		init: init
+		sendMP: sendMP
 	}
 })();
 
@@ -246,7 +265,7 @@ function ajax(option) {
 		path: option.url,
 		method: (option.method == "GET") ? "GET" : "POST",
 		headers: {
-			"User-Agent": "NodeJS " + _Vname.split("/"),
+			"User-Agent": "NodeJS " + LeeKloud.title,
 			"Content-Type": "application/x-www-form-urlencoded",
 			"Accept": "application/json",
 			"Content-Length": data.length,

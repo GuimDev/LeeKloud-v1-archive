@@ -37,6 +37,8 @@ const LeeKloud = module.exports = {
 
 	//SUPPORT LK v1
 	getIAids: function() {
+		if (!LeeKloud.farmer || !LeeKloud.farmer.ais)
+			return [];
 		const arr = [];
 		for (var i = 0; i < LeeKloud.farmer.ais.length; i++) {
 			arr.push(LeeKloud.farmer.ais[i].id);
@@ -44,6 +46,8 @@ const LeeKloud = module.exports = {
 		return arr;
 	},
 	getLeekIds: function() {
+		if (!LeeKloud.farmer || !LeeKloud.farmer.leeks)
+			return [];
 		const arr = [];
 		for (var index in LeeKloud.farmer.leeks) {
 			if (object.hasOwnProperty(index)) {
@@ -66,8 +70,7 @@ const __AI_IDS = undefined,
 
 function getFileContent(filename, check) {
 	if (check && !fs.existsSync(filename)) return "";
-	return fs.readFileSync(filename).toString();
-	//fixASCII(fs.readFileSync(filename).toString());
+	return fs.readFileSync(filename);
 }
 
 function setFileContent(filename, data) {

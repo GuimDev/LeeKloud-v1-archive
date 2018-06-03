@@ -43,9 +43,6 @@ function main() {
 
 	launcherReadline();
 
-	LeekWarsAPI.init({
-		title: LeeKloud.title
-	});
 	if (dirORcwd === "dir") {
 		console.log("(?) Utilisation automatique des données se situant dans le répertoire d'installation.\n");
 		loginStep(2);
@@ -86,7 +83,7 @@ function loginStep(step, arg) {
 
 			if (choice === "1" || choice === "2") {
 				LeeKloud.folders.parent = (choice === "1" ? process.cwd() : __dirname) + path.sep;
-				console.log("Emplacement : \033[96m" + LeeKloud.folders.base + "\033[0m");
+				console.log("Emplacement : \033[96m" + LeeKloud.folders.parent + "\033[0m\n");
 
 				loginStep(2);
 			} else if (choice === "3") {
@@ -126,7 +123,7 @@ function loginStep(step, arg) {
 		if (!fs.existsSync(LeeKloud.folders.account + lastLogin)) {
 			return credentialsRequired();
 		}
-		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/.data/cookieStorage";
+		LeeKloud.cookieStorage = LeeKloud.folders.account + lastLogin + "/.data/cookieStorage".replace(/\//g, path.sep);
 
 		const updater = LeekWarsAPI.useSession();
 		if (!updater) { // Si pas de cookie pour moi
@@ -147,6 +144,7 @@ function loginStep(step, arg) {
 			});
 		}
 	} else if (step === 3) {
+		console.log("");
 		myRL.getRL().question("Pseudo : ", function(login) {
 			myRL.setHistory(myRL.getHistory().slice(1));
 			if (login === "") {
@@ -197,17 +195,20 @@ function loginStep(step, arg) {
 	}
 }
 
-function successConnection(json) {
-	console.log("Connexion réussie.");
+function successConnection(json, saveCookie) {
+	console.log("\nConnexion réussie.\n");
 
 	LeeKloud.currentLogin = json.farmer.login;
-	LeeKloud.cookieStorage = LeeKloud.folders.account + LeeKloud.currentLogin + "/.data/cookieStorage";
+	LeeKloud.cookieStorage = LeeKloud.folders.account + LeeKloud.currentLogin + "/.data/cookieStorage".replace(/\//g, path.sep);
 	LeeKloud.setFileContent(LeeKloud.files.lastLogin, LeeKloud.currentLogin);
 
 	makeFolder();
+	saveCookie(); // Après makeFolder ! « Oui chef ! »
 
 	LeeKloud.farmer = json.farmer;
 	LeeKloud.setFileContent(LeeKloud.files.farmer, JSON.stringify(json.farmer, null, 4));
+
+	nextStep();
 
 	setInterval(function() {
 		console.log("update...");
@@ -220,8 +221,6 @@ function successConnection(json) {
 			console.log("update: fail");
 		});
 	}, 60 * 1000);
-
-	nextStep();
 }
 
 function makeWorkingFolder() {
@@ -411,7 +410,7 @@ function getPlugins() {
 }
 
 function shutdown() {
-	process.stdin.pause();
+	myRL.getRL().pause();
 	console.log("\nArrêt dans 4 secondes.");
 	return setTimeout(function() {
 		LeeKloudStop();
@@ -422,7 +421,7 @@ function getScripts() {
 	if (fs.existsSync(LeeKloud.files.hash)) {
 		__FILEHASH = JSON.parse(LeeKloud.getFileContent(LeeKloud.files.hash));
 	}
-	console.log("Obtention de la liste des scripts.\n");
+	console.log("Obtention de la liste des scripts :");
 
 	console.log(">> Téléchargements...");
 
@@ -1375,6 +1374,11 @@ function launcherReadline() {
 }
 
 function LeeKloudStop() {
+	const IAids = LeeKloud.getIAids();
+	IAids.forEach(function (value, index) {
+		const myIA = new __IA(value);
+		fs.unwatchFile(myIA.filepath);
+	});
 	saveHistory();
 	console.log("Arrêt.");
 	process.exit(1)
@@ -1412,7 +1416,7 @@ function invasionB(b) {
 }
 
 function sha256(data) {
-	return crypto.createHash("sha256").update(data).digest("hex"); //hex ===> github
+	return crypto.createHash("sha256").update(data).digest("base64");
 }
 
 function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
@@ -1423,6 +1427,14 @@ function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
 }
 //https://api.github.com/repos/GuimDev/LeeKloud/branches/master
 
+/*
+fs.readdir("./scandir/", (err, files) => {
+	files.forEach(file => {
+		const data = getFileContent("./scandir/" + file);
+		console.log(file, sha1("blob " + data.length + "\0" + data), data.length);
+	});
+})
+*/
 
 //https://api.github.com/repos/GuimDev/LeeKloud
 //https://api.github.com/repos/GuimDev/LeeKloud/branches/update-2.0.0
