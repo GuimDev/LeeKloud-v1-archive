@@ -1425,7 +1425,8 @@ function fixASCII(data) { // Problème d'encodage, on vire le caractère 65279.
 
 
 //https://api.github.com/repos/GuimDev/LeeKloud
-//https://api.github.com/repos/GuimDev/LeeKloud/git/trees/d369425ae654cda0afe878f6ba89907c0dc0dfab
+//https://api.github.com/repos/GuimDev/LeeKloud/branches/update-2.0.0
+//https://api.github.com/repos/GuimDev/LeeKloud/git/trees/c37ce473fccfd7f68dea34e0f8a5a220f43cc52a
 //https://api.github.com/repos/GuimDev/LeeKloud/releases/latest
 //https://api.github.com/repos/GuimDev/LeeKloud/tags
 function ajaxLeeKloud(path, success) {
