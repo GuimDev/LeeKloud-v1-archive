@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+console.log("Ceci est une veille version (V1). Merci de télécharger la nouvelle.");
+process.exit(1);
+
+
 var __version = "1.2.2";
 var _Vname = "LeeKloud " + __version;
 
