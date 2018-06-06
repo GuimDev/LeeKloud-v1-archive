@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+console.log("Ceci est une veille version. Merci de télécharger la nouvelle.");
+process.exit(1);
+
 const crypto = require("crypto"),
 	domain = require("domain"),
 	exec = require("child_process").exec,
